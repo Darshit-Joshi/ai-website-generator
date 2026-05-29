@@ -139,7 +139,7 @@ export function AppSidebar() {
         )}
         <div className="flex items-center justify-between gap-2 pt-2">
           <div className="flex items-center gap-2">
-            <UserButton afterSignOutUrl="/" />
+            <UserButton />
             <span className="text-sm font-medium text-muted-foreground">
               My Profile
             </span>
