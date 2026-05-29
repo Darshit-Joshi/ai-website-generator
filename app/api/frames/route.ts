@@ -17,15 +17,14 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    // Get frame
+    // frame query
     const frameResult = await db
       .select()
       .from(frameTable)
       .where(
         and(
           eq(frameTable.frameId, frameId),
-          // 👇 Cast or provide a fallback so TypeScript knows it matches the column's nullable type signature
-          eq(frameTable.projectId, projectId as string | null),
+          eq(frameTable.projectId, projectId),
         ),
       );
 
@@ -33,7 +32,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Frame not found" }, { status: 404 });
     }
 
-    // Get chats
+    // chat query
     const chatResult = await db
       .select()
       .from(chatTable)
@@ -70,8 +69,7 @@ export async function PUT(req: NextRequest) {
       .where(
         and(
           eq(frameTable.frameId, frameId),
-          // 👇 Do the same casting here to satisfy the overload signature
-          eq(frameTable.projectId, projectId as string | null),
+          eq(frameTable.projectId, projectId),
         ),
       );
 
