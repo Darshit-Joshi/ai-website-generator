@@ -318,9 +318,8 @@ function SettingSection({
         </label>
         <ToggleGroup
           type="single"
-          value={styles.textAlign}
+          value={styles.textAlign as any} // 👈 Force bypass the type strictness
           onValueChange={(value) => value && applyStyle("textAlign", value)}
-          className="grid grid-cols-3 rounded-lg border p-1 bg-muted/20"
         >
           <ToggleGroupItem
             value="left"
