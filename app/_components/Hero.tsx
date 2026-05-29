@@ -13,7 +13,6 @@ import React, { useContext, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { SignInButton, useAuth, useUser } from "@clerk/nextjs";
 import axios from "axios";
-import { log } from "console";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { UserDetailContext } from "@/context/UserDetailContext";
@@ -62,34 +61,57 @@ function Hero() {
       toast.error("You have no credits left");
       return;
     }
+
     setLoading(true);
+
     const projectId = uuidv4();
     const frameId = generateRandomFrameNumber();
 
+    // 🔥 STRONG SYSTEM RULES (IMPORTANT FIX)
     const messages = [
+      {
+        role: "system",
+        content: `
+You are a professional website generator.
+
+STRICT RULES:
+- Generate complete HTML websites only
+- Must include full layout (header, hero, sections, footer)
+- Every <img> must have a valid working URL
+- Use ONLY:
+  https://images.unsplash.com/
+  https://source.unsplash.com/
+- Never leave empty src
+- Never use placeholders like "image.jpg"
+- Output must be production-ready UI
+`,
+      },
       {
         role: "user",
         content: userInput,
       },
     ];
+
     try {
       const result = await axios.post("/api/projects", {
-        projectId: projectId,
-        frameId: frameId,
-        messages: messages,
+        projectId,
+        frameId,
+        messages, // 🔥 FIXED (important)
         credits: userDetail?.credits,
       });
-      console.log(result.data);
+
       toast.success("Project Created");
+
       router.push(`/playground/${projectId}?frameId=${frameId}`);
-      setUserDetail((prev) => ({
+
+      setUserDetail((prev: any) => ({
         ...prev,
         credits: prev?.credits - 1,
       }));
-      setLoading(false);
     } catch (e) {
-      toast.error("internal server error");
       console.log(e);
+      toast.error("internal server error");
+    } finally {
       setLoading(false);
     }
   };

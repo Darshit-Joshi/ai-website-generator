@@ -6,12 +6,10 @@ import { db } from "@/config/db";
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
-
     const frameId = searchParams.get("frameId");
-
     const projectId = searchParams.get("projectId");
 
-    if (!frameId || !projectId) {
+    if (!frameId) {
       return NextResponse.json(
         {
           error: "frameId and projectId are required",
@@ -23,16 +21,18 @@ export async function GET(req: NextRequest) {
     const frameResult = await db
       .select()
       .from(frameTable)
-      // @ts-ignore
-      .where(eq(frameTable.frameId, frameId));
-
+      .where(
+        and(
+          eq(frameTable.frameId, frameId),
+          eq(frameTable.projectId, projectId),
+        ),
+      );
     const chatResult = await db
       .select()
       .from(chatTable)
-      // @ts-ignore
       .where(eq(chatTable.frameId, frameId));
 
-    if (!frameResult.length) {
+    if (!frameResult.length || !chatResult) {
       return NextResponse.json(
         {
           error: "Frame not found",
@@ -41,11 +41,6 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    console.log("frameId:", frameId);
-
-    console.log("frameResult:", frameResult);
-
-    console.log("chatResult:", chatResult);
     const finalResult = {
       ...frameResult[0],
 

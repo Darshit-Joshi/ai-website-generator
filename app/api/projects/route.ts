@@ -7,10 +7,10 @@ import {
 import { db } from "@/config/db";
 import { currentUser } from "@clerk/nextjs/server";
 import { NextRequest, NextResponse } from "next/server";
-import { emit } from "process";
+import { eq } from "drizzle-orm";
 
 export async function POST(req: NextRequest) {
-  const { projectId, frameId, message, credits } = await req.json();
+  const { projectId, frameId, messages, credits } = await req.json();
 
   const user = await currentUser();
   const projectResult = await db.insert(projectTable).values({
@@ -22,11 +22,11 @@ export async function POST(req: NextRequest) {
     .values({ frameId: frameId, projectId: projectId });
 
   const chatResult = await db.insert(chatTable).values({
-    chatMessage: message,
+    chatMessage: messages,
     createdBy: user?.primaryEmailAddress?.emailAddress,
+    frameId: frameId,
   });
 
-  //
   const userResult = await db
     .update(usersTable)
     .set({
@@ -37,6 +37,7 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({
     projectId,
     frameId,
-    message,
+    messages,
+    credits,
   });
 }

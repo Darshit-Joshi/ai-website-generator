@@ -5,6 +5,7 @@ import { log } from "console";
 import { useUser } from "@clerk/nextjs";
 import { UserDetailContext } from "@/context/UserDetailContext";
 import { OnSaveContext } from "@/context/OnSaveContext";
+
 function Provider({
   children,
 }: Readonly<{
@@ -17,12 +18,12 @@ function Provider({
   useEffect(() => {
     CreateNewUser();
   }, [user]);
-
   const CreateNewUser = async () => {
     const result = await axios.post("/api/users", {});
     console.log(result.data);
     setUserDetail(result.data?.user);
   };
+
   return (
     <UserDetailContext.Provider value={{ userDetail, setUserDetail }}>
       <OnSaveContext.Provider value={{ onSavedata, setOnSaveData }}>

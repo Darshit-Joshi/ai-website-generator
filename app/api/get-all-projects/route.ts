@@ -4,11 +4,11 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { eq, inArray, desc } from "drizzle-orm";
 import { chatTable, frameTable, projectTable } from "@/config/schema";
+
 export async function GET(req: NextRequest) {
   const user = await currentUser();
   // Get the project
 
-  //@ts-ignore
   const projects = await db
     .select()
     .from(projectTable)
@@ -30,7 +30,6 @@ export async function GET(req: NextRequest) {
     const frames = await db
       .select({ frameId: frameTable.frameId })
       .from(frameTable)
-      //@ts-ignore
       .where(eq(frameTable.projectId, project.projectId));
 
     // Fetch chats for all frames in this project in one query

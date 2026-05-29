@@ -1,5 +1,25 @@
-import { SwatchBook } from "lucide-react";
+"use client";
+
 import React, { useEffect, useState } from "react";
+
+import {
+  AlignCenter,
+  AlignLeft,
+  AlignRight,
+  Bold,
+  Brush,
+  CornerDownRight,
+  Palette,
+  SwatchBook,
+  Trash2,
+} from "lucide-react";
+
+import { Button } from "@/components/ui/button";
+
+import { Input } from "@/components/ui/input";
+
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+
 import {
   Select,
   SelectContent,
@@ -7,235 +27,391 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Input } from "@/components/ui/input";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import { AlignLeft, AlignCenter, AlignRight } from "lucide-react";
-import { Button } from "@/components/ui/button";
 
 type Props = {
   selectedEl: HTMLElement;
+
   clearSelection: () => void;
 };
 
 function SettingSection({ selectedEl, clearSelection }: Props) {
   const [classes, setClasses] = useState<string[]>([]);
+
   const [newClass, setNewClass] = useState("");
-  const [align, setAlign] = React.useState(selectedEl?.style?.textAlign || "");
 
-  const applyStyle = (property: string, value: string) => {
-    if (selectedEl) {
-      selectedEl.style[property as any] = value;
-    }
-  };
+  const [styles, setStyles] = useState({
+    fontSize: "16px",
+    color: "#000000",
+    backgroundColor: "#ffffff",
+    padding: "",
+    margin: "",
+    borderRadius: "",
+    width: "",
+    height: "",
+    fontWeight: "400",
+    textAlign: "left",
+    border: "",
+    boxShadow: "",
+  });
 
-  // Update alignment style when toggled
-  React.useEffect(() => {
-    if (selectedEl && align) {
-      selectedEl.style.textAlign = align;
-    }
-  }, [align, selectedEl]);
+  // =========================================
+  // INITIALIZE
+  // =========================================
 
-  // Keep in sync if element classes are modified elsewhere
   useEffect(() => {
     if (!selectedEl) return;
 
-    // set initial classes
-    const currentClasses = selectedEl.className
-      .split(" ")
-      .filter((c) => c.trim() !== "");
+    setStyles({
+      fontSize: selectedEl.style.fontSize || "16px",
+
+      color: selectedEl.style.color || "#000000",
+
+      backgroundColor: selectedEl.style.backgroundColor || "#ffffff",
+
+      padding: selectedEl.style.padding || "",
+
+      margin: selectedEl.style.margin || "",
+
+      borderRadius: selectedEl.style.borderRadius || "",
+
+      width: selectedEl.style.width || "",
+
+      height: selectedEl.style.height || "",
+
+      fontWeight: selectedEl.style.fontWeight || "400",
+
+      textAlign: selectedEl.style.textAlign || "left",
+
+      border: selectedEl.style.border || "",
+
+      boxShadow: selectedEl.style.boxShadow || "",
+    });
+
+    const currentClasses = selectedEl.className.split(" ").filter(Boolean);
+
     setClasses(currentClasses);
-
-    // watch for future class changes
-    const observer = new MutationObserver(() => {
-      const updated = selectedEl.className
-        .split(" ")
-        .filter((c) => c.trim() !== "");
-      setClasses(updated);
-    });
-
-    observer.observe(selectedEl, {
-      attributes: true,
-      attributeFilter: ["class"],
-    });
-    return () => observer.disconnect();
   }, [selectedEl]);
 
-  // Remove a class
+  // =========================================
+  // APPLY STYLE
+  // =========================================
+
+  const applyStyle = (property: string, value: string) => {
+    if (!selectedEl) return;
+
+    selectedEl.style[property as any] = value;
+
+    setStyles((prev) => ({
+      ...prev,
+      [property]: value,
+    }));
+  };
+
+  // =========================================
+  // REMOVE CLASS
+  // =========================================
+
   const removeClass = (cls: string) => {
     const updated = classes.filter((c) => c !== cls);
+
     setClasses(updated);
+
     selectedEl.className = updated.join(" ");
   };
 
-  // Add new class
+  // =========================================
+  // ADD CLASS
+  // =========================================
+
   const addClass = () => {
     const trimmed = newClass.trim();
+
     if (!trimmed) return;
+
     if (!classes.includes(trimmed)) {
       const updated = [...classes, trimmed];
+
       setClasses(updated);
+
       selectedEl.className = updated.join(" ");
     }
+
     setNewClass("");
   };
 
-  return (
-    <div className="w-96 shadow p-4 space-y-4 overflow-auto h-[98vh] rounded-xl mt-2 mr-2">
-      <h2 className="flex gap-2 items-center font-bold">
-        <SwatchBook /> Settings
-      </h2>
+  // =========================================
+  // DELETE ELEMENT
+  // =========================================
 
-      {/* Font Size + Text Color inline */}
-      <div className="flex items-center gap-4">
-        <div className="flex-1">
-          <label className="text-sm">Font Size</label>
-          <Select
-            defaultValue={selectedEl?.style?.fontSize || "24px"}
-            onValueChange={(value) => applyStyle("fontSize", value)}
-          >
-            <SelectTrigger className="w-full">
-              <SelectValue placeholder="Select Size" />
-            </SelectTrigger>
-            <SelectContent>
-              {[...Array(85)].map((_, index) => (
-                <SelectItem value={index + 12 + "px"} key={index}>
-                  {index + 12}px
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+  const deleteElement = () => {
+    selectedEl.remove();
+
+    clearSelection();
+  };
+
+  // =========================================
+  // RESET STYLES
+  // =========================================
+
+  const resetStyles = () => {
+    selectedEl.removeAttribute("style");
+
+    window.location.reload();
+  };
+
+  return (
+    <div className="h-screen w-96 overflow-y-auto border-l bg-white p-5 shadow-xl">
+      {/* HEADER */}
+
+      <div className="mb-6 flex items-center justify-between">
+        <h2 className="flex items-center gap-2 text-lg font-bold">
+          <SwatchBook className="h-5 w-5" />
+          Settings
+        </h2>
+
+        <Button size="icon" variant="destructive" onClick={deleteElement}>
+          <Trash2 className="h-4 w-4" />
+        </Button>
+      </div>
+
+      {/* FONT SIZE */}
+
+      <div className="mb-5">
+        <label className="mb-2 block text-sm font-medium">Font Size</label>
+
+        <Select
+          value={styles.fontSize}
+          onValueChange={(value) => applyStyle("fontSize", value)}
+        >
+          <SelectTrigger>
+            <SelectValue placeholder="Font Size" />
+          </SelectTrigger>
+
+          <SelectContent>
+            {[...Array(80)].map((_, index) => (
+              <SelectItem key={index} value={`${index + 10}px`}>
+                {index + 10}px
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      {/* COLORS */}
+
+      <div className="mb-5 grid grid-cols-2 gap-4">
         <div>
-          <label className="text-sm block">Text Color</label>
+          <label className="mb-2 flex items-center gap-1 text-sm font-medium">
+            <Palette className="h-4 w-4" />
+            Text
+          </label>
+
           <input
             type="color"
-            className="w-[48px] h-[36px] rounded-lg mt-1"
-            value={selectedEl?.style?.color || "#000000"}
-            onChange={(event) => applyStyle("color", event.target.value)}
+            value={styles.color}
+            onChange={(e) => applyStyle("color", e.target.value)}
+            className="h-10 w-full cursor-pointer rounded-lg border"
+          />
+        </div>
+
+        <div>
+          <label className="mb-2 flex items-center gap-1 text-sm font-medium">
+            <Brush className="h-4 w-4" />
+            Background
+          </label>
+
+          <input
+            type="color"
+            value={styles.backgroundColor}
+            onChange={(e) => applyStyle("backgroundColor", e.target.value)}
+            className="h-10 w-full cursor-pointer rounded-lg border"
           />
         </div>
       </div>
 
-      {/* Text Alignment */}
-      <div>
-        <label className="text-sm mb-1 block">Text Alignment</label>
+      {/* ALIGNMENT */}
+
+      <div className="mb-5">
+        <label className="mb-2 block text-sm font-medium">Alignment</label>
+
         <ToggleGroup
           type="single"
-          value={align}
-          onValueChange={setAlign}
-          className="w-full border rounded-lg p-1 inline-flex m-all justify-between"
+          value={styles.textAlign}
+          onValueChange={(value) => applyStyle("textAlign", value)}
+          className="grid grid-cols-3 rounded-xl border p-1"
         >
-          <ToggleGroupItem
-            value="left"
-            className="p-2 rounded hover:bg-gray-200 flex-1"
-          >
-            <AlignLeft size={20} />
+          <ToggleGroupItem value="left">
+            <AlignLeft className="h-4 w-4" />
           </ToggleGroupItem>
-          <ToggleGroupItem
-            value="center"
-            className="p-2 rounded hover:bg-gray-200 flex-1"
-          >
-            <AlignCenter size={20} />
+
+          <ToggleGroupItem value="center">
+            <AlignCenter className="h-4 w-4" />
           </ToggleGroupItem>
-          <ToggleGroupItem
-            value="right"
-            className="p-2 rounded hover:bg-gray-200 flex-1"
-          >
-            <AlignRight size={20} />
+
+          <ToggleGroupItem value="right">
+            <AlignRight className="h-4 w-4" />
           </ToggleGroupItem>
         </ToggleGroup>
       </div>
 
-      {/* Background Color + Border Radius inline */}
-      <div className="flex items-center gap-4">
-        <div className="flex-1">
-          <label className="text-sm block">Background</label>
-          <input
-            type="color"
-            className="w-[48px] h-[36px] rounded-lg mt-1"
-            defaultValue={selectedEl?.style?.backgroundColor || "#ffffff"}
-            onChange={(event) =>
-              applyStyle("backgroundColor", event.target.value)
-            }
-          />
-        </div>
-        <div className="flex-1">
-          <label className="text-sm">Border Radius</label>
+      {/* FONT WEIGHT */}
+
+      <div className="mb-5">
+        <label className="mb-2 flex items-center gap-1 text-sm font-medium">
+          <Bold className="h-4 w-4" />
+          Font Weight
+        </label>
+
+        <Select
+          value={styles.fontWeight}
+          onValueChange={(value) => applyStyle("fontWeight", value)}
+        >
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
+
+          <SelectContent>
+            <SelectItem value="300">Light</SelectItem>
+
+            <SelectItem value="400">Normal</SelectItem>
+
+            <SelectItem value="500">Medium</SelectItem>
+
+            <SelectItem value="700">Bold</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      {/* DIMENSIONS */}
+
+      <div className="mb-5 grid grid-cols-2 gap-4">
+        <div>
+          <label className="mb-2 block text-sm font-medium">Width</label>
+
           <Input
-            type="text"
-            placeholder="e.g. 8px"
-            defaultValue={selectedEl?.style?.borderRadius || ""}
-            onChange={(e) => applyStyle("borderRadius", e.target.value)}
-            className="mt-1"
+            value={styles.width}
+            placeholder="100%"
+            onChange={(e) => applyStyle("width", e.target.value)}
+          />
+        </div>
+
+        <div>
+          <label className="mb-2 block text-sm font-medium">Height</label>
+
+          <Input
+            value={styles.height}
+            placeholder="300px"
+            onChange={(e) => applyStyle("height", e.target.value)}
           />
         </div>
       </div>
 
-      {/* Padding */}
-      <div>
-        <label className="text-sm">Padding</label>
-        <Input
-          type="text"
-          placeholder="e.g. 10px 15px"
-          defaultValue={selectedEl?.style?.padding || ""}
-          onChange={(e) => applyStyle("padding", e.target.value)}
-          className="mt-1"
-        />
+      {/* SPACING */}
+
+      <div className="space-y-4">
+        <div>
+          <label className="mb-2 block text-sm font-medium">Padding</label>
+
+          <Input
+            value={styles.padding}
+            placeholder="10px 20px"
+            onChange={(e) => applyStyle("padding", e.target.value)}
+          />
+        </div>
+
+        <div>
+          <label className="mb-2 block text-sm font-medium">Margin</label>
+
+          <Input
+            value={styles.margin}
+            placeholder="20px auto"
+            onChange={(e) => applyStyle("margin", e.target.value)}
+          />
+        </div>
+
+        <div>
+          <label className="mb-2 flex items-center gap-1 text-sm font-medium">
+            <CornerDownRight className="h-4 w-4" />
+            Border Radius
+          </label>
+
+          <Input
+            value={styles.borderRadius}
+            placeholder="12px"
+            onChange={(e) => applyStyle("borderRadius", e.target.value)}
+          />
+        </div>
+
+        <div>
+          <label className="mb-2 block text-sm font-medium">Border</label>
+
+          <Input
+            value={styles.border}
+            placeholder="1px solid #000"
+            onChange={(e) => applyStyle("border", e.target.value)}
+          />
+        </div>
+
+        <div>
+          <label className="mb-2 block text-sm font-medium">Box Shadow</label>
+
+          <Input
+            value={styles.boxShadow}
+            placeholder="0 4px 20px rgba(0,0,0,0.1)"
+            onChange={(e) => applyStyle("boxShadow", e.target.value)}
+          />
+        </div>
       </div>
 
-      {/* Margin */}
-      <div>
-        <label className="text-sm">Margin</label>
-        <Input
-          type="text"
-          placeholder="e.g. 10px 15px"
-          defaultValue={selectedEl?.style?.margin || ""}
-          onChange={(e) => applyStyle("margin", e.target.value)}
-          className="mt-1"
-        />
-      </div>
+      {/* CLASSES */}
 
-      {/* === Class Manager === */}
-      <div>
-        <label className="text-sm font-medium">Classes</label>
+      <div className="mt-8">
+        <label className="mb-3 block text-sm font-semibold">
+          Tailwind Classes
+        </label>
 
-        {/* Render existing or manually classes */}
-        <div className="flex flex-wrap gap-1 mt-2">
+        <div className="mb-4 flex flex-wrap gap-2">
           {classes.length > 0 ? (
             classes.map((cls) => (
               <span
                 key={cls}
-                className="flex text-xs items-center gap-1 px-2 py-1 text-sm rounded-full bg-gray-100 border"
+                className="flex items-center gap-2 rounded-full border bg-gray-100 px-3 py-1 text-xs"
               >
                 {cls}
+
                 <button
                   onClick={() => removeClass(cls)}
-                  className="ml-1 text-red-500 hover:text-red-700"
+                  className="text-red-500"
                 >
                   ×
                 </button>
               </span>
             ))
           ) : (
-            <span className="text-xs text-gray-400 text-center">
-              No classes applied
-            </span>
+            <span className="text-xs text-gray-400">No classes</span>
           )}
         </div>
 
-        {/* Add new class input */}
-        <div className="flex gap-1 mt-2">
+        <div className="flex gap-2">
           <Input
             value={newClass}
+            placeholder="Add class"
             onChange={(e) => setNewClass(e.target.value)}
-            placeholder="Add class..."
           />
-          <Button type="button" onClick={addClass}>
-            Add
-          </Button>
+
+          <Button onClick={addClass}>Add</Button>
         </div>
+      </div>
+
+      {/* FOOTER */}
+
+      <div className="mt-10">
+        <Button variant="outline" className="w-full" onClick={resetStyles}>
+          Reset Styles
+        </Button>
       </div>
     </div>
   );
 }
+
 export default SettingSection;

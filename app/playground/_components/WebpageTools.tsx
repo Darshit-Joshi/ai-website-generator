@@ -1,80 +1,65 @@
+"use client";
+
+import React, { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
-  Code,
-  Code2Icon,
+  Check,
+  Copy,
   Download,
   Monitor,
+  RefreshCcw,
+  Smartphone,
   SquareArrowOutUpRight,
-  SquareArrowUpRight,
-  TabletSmartphone,
 } from "lucide-react";
-import React, { useEffect, useState } from "react";
+import { toast } from "sonner";
 import ViewCodeBlock from "./ViewCodeBlock";
 
-const HTML_CODE = `
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="AI Website Builder - Modern TailwindCSS + Flowbite Template">
-    <title>AI Website Builder</title>
+type Props = {
+  selectedScreenSize: string;
+  setSelectedScreenSize: (value: string) => void;
+  generatedCode: string;
+};
 
-    <script src="https://cdn.tailwindcss.com"></script>
-
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/flowbite/2.3.0/flowbite.min.css" rel="stylesheet">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/flowbite/2.3.0/flowbite.min.js"></script>
-
-    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
-
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/aos/2.3.4/aos.css" rel="stylesheet">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/aos/2.3.4/aos.js"></script>
-
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
-
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/lottie-web/5.11.2/lottie.min.js"></script>
-
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swiper@10/swiper-bundle.min.css" />
-    <script src="https://cdn.jsdelivr.net/npm/swiper@10/swiper-bundle.min.js"></script>
-
-    <link rel="stylesheet" href="https://unpkg.com/tippy.js@6/dist/tippy.css" />
-    <script src="https://unpkg.com/@popperjs/core@2"></script>
-    <script src="https://unpkg.com/tippy.js@6"></script>
-</head>
-<body id="root">
-{code}
-</body>
-</html>
-    `;
 function WebpageTools({
   selectedScreenSize,
   setSelectedScreenSize,
   generatedCode,
-}: any) {
-  const [finalCode, setFinalCode] = useState<string>();
+}: Props) {
+  const [copied, setCopied] = useState(false);
 
-  useEffect(() => {
-    const cleanCode = (HTML_CODE.replace("{code}", generatedCode) || "")
-      .replaceAll("```html", "")
-      .replace("```", "")
-      .replace("html", "");
+  // =========================
+  // CLEAN CODE (SAFE ONLY)
+  // =========================
+  const finalCode = (() => {
+    if (!generatedCode) return "<div>No content</div>";
 
-    setFinalCode(cleanCode);
-  }, [generatedCode]);
+    return generatedCode.trim();
+  })();
 
+  // =========================
+  // VIEW
+  // =========================
   const ViewInNewTab = () => {
-    if (!finalCode) return;
+    if (!finalCode) {
+      toast.error("No code available");
+      return;
+    }
 
-    const blob = new Blob([finalCode ?? ""], { type: "text/html" });
+    const blob = new Blob([finalCode], { type: "text/html" });
     const url = URL.createObjectURL(blob);
-
     window.open(url, "_blank");
   };
 
+  // =========================
+  // DOWNLOAD
+  // =========================
   const downloadCode = () => {
-    const blob = new Blob([finalCode ?? ""], { type: "text/html" });
+    if (!finalCode) {
+      toast.error("No code available");
+      return;
+    }
+
+    const blob = new Blob([finalCode], { type: "text/html" });
     const url = URL.createObjectURL(blob);
 
     const a = document.createElement("a");
@@ -83,39 +68,91 @@ function WebpageTools({
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
+
     URL.revokeObjectURL(url);
+
+    toast.success("Downloaded");
   };
+
+  // =========================
+  // COPY
+  // =========================
+  const CopyCode = async () => {
+    try {
+      await navigator.clipboard.writeText(finalCode);
+      setCopied(true);
+      toast.success("Copied");
+
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      toast.error("Failed to copy");
+    }
+  };
+
+  // =========================
+  // REFRESH
+  // =========================
+  const RefreshPreview = () => {
+    window.location.reload();
+  };
+
   return (
-    <div className="p-2 shadow rounded-xl w-full">
-      <div className="flex gap-2">
+    <div className="mt-4 flex w-full items-center justify-between rounded-2xl border bg-white p-3 shadow-sm">
+      {/* SCREEN SIZE */}
+      <div className="flex items-center gap-2">
         <Button
-          className={`${selectedScreenSize == "web" ? " border border-primary" : null}`}
-          variant={"ghost"}
+          variant="ghost"
+          className={`rounded-xl border transition-all ${
+            selectedScreenSize === "web"
+              ? "border-primary bg-primary/10"
+              : "border-transparent"
+          }`}
           onClick={() => setSelectedScreenSize("web")}
         >
-          <Monitor />
+          <Monitor className="h-4 w-4" />
         </Button>
+
         <Button
-          className={`${selectedScreenSize == "mobile" ? "border border-primary" : null}`}
-          variant={"ghost"}
+          variant="ghost"
+          className={`rounded-xl border transition-all ${
+            selectedScreenSize === "mobile"
+              ? "border-primary bg-primary/10"
+              : "border-transparent"
+          }`}
           onClick={() => setSelectedScreenSize("mobile")}
         >
-          <TabletSmartphone />
+          <Smartphone className="h-4 w-4" />
         </Button>
       </div>
 
-      <div className={"flex gap-2"}>
-        <Button variant={"outline"} onClick={() => ViewInNewTab}>
-          View <SquareArrowOutUpRight />
+      {/* ACTIONS */}
+      <div className="flex items-center gap-2">
+        <Button variant="outline" onClick={ViewInNewTab} className="rounded-xl">
+          View
+          <SquareArrowOutUpRight className="ml-2 h-4 w-4" />
         </Button>
-        <ViewCodeBlock code={finalCode}>
-          <Button>
-            Code
-            <Code2Icon />
-          </Button>
-        </ViewCodeBlock>
-        <Button onClick={downloadCode}>
-          Download <Download />
+
+        <ViewCodeBlock code={finalCode} />
+
+        <Button variant="outline" onClick={CopyCode} className="rounded-xl">
+          {copied ? (
+            <>
+              Copied <Check className="ml-2 h-4 w-4" />
+            </>
+          ) : (
+            <>
+              Copy <Copy className="ml-2 h-4 w-4" />
+            </>
+          )}
+        </Button>
+
+        <Button onClick={downloadCode} className="rounded-xl">
+          Download
+          <Download className="ml-2 h-4 w-4" />
+        </Button>
+
+        <Button variant="ghost" onClick={RefreshPreview} className="rounded-xl">
+          <RefreshCcw className="h-4 w-4" />
         </Button>
       </div>
     </div>

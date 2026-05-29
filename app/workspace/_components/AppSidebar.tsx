@@ -20,11 +20,12 @@ export function AppSidebar() {
   const [projectList, setProjectList] = useState([]);
   const { userDetail, setUserDetail } = useContext(UserDetailContext);
   const { has } = useAuth();
+
   useEffect(() => {
     GetProjectList();
-  }, []);
-
+  });
   const hasUnlimitedAccess = has && has({ plan: "unlimited" });
+
   const GetProjectList = async () => {
     const result = await axios.get("/api/get-all-projects");
     setProjectList(result.data);
@@ -49,17 +50,17 @@ export function AppSidebar() {
           )}
 
           <div>
-            {projectList.map((project: any, index) => {
+            {projectList.map((project: any, index) => (
               <Link
                 href={`/playground/${project.projectId}?frameId${project.frameId}`}
                 key={index}
                 className="my-2 hover:bg-secondary p-2 rounded-lg pointer"
               >
                 <h2 className="line-clamp-1 p-1">
-                  {project.chats[0].chatMessage[0]?.content}
+                  {project.chats[0]?.chatMessage[0]?.content}
                 </h2>
-              </Link>;
-            })}
+              </Link>
+            ))}
           </div>
         </SidebarGroup>
       </SidebarContent>
