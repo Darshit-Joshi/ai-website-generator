@@ -357,13 +357,15 @@ function SettingSection({
       </div>
 
       {/* FONT WEIGHT */}
+      {/* FONT WEIGHT */}
       <div className="mb-5">
         <label className="mb-1.5 flex items-center gap-1 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
           <Bold className="h-3.5 w-3.5" /> Font Weight
         </label>
         <Select
           value={styles.fontWeight}
-          onValueChange={(value) => applyStyle("fontWeight", value)}
+          // ADD THE FALLBACK HERE 👇
+          onValueChange={(value) => applyStyle("fontWeight", value ?? "")}
         >
           <SelectTrigger className="h-9">
             <SelectValue />
