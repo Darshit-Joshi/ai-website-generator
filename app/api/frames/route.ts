@@ -17,17 +17,14 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    const safeFrameId = frameId;
-    const safeProjectId = projectId;
-
     // Get frame
     const frameResult = await db
       .select()
       .from(frameTable)
       .where(
         and(
-          eq(frameTable.frameId, safeFrameId),
-          eq(frameTable.projectId, safeProjectId),
+          eq(frameTable.frameId, frameId),
+          eq(frameTable.projectId, projectId),
         ),
       );
 
@@ -35,11 +32,11 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Frame not found" }, { status: 404 });
     }
 
-    // Get chats (FIXED: use safeFrameId)
+    // Get chats
     const chatResult = await db
       .select()
       .from(chatTable)
-      .where(eq(chatTable.frameId, safeFrameId));
+      .where(eq(chatTable.frameId, frameId));
 
     return NextResponse.json({
       ...frameResult[0],
@@ -68,9 +65,7 @@ export async function PUT(req: NextRequest) {
 
     await db
       .update(frameTable)
-      .set({
-        designCode,
-      })
+      .set({ designCode })
       .where(
         and(
           eq(frameTable.frameId, frameId),
