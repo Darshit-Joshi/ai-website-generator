@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import axios from "axios";
 import { toast } from "sonner";
 import { useParams, useSearchParams } from "next/navigation";
@@ -20,159 +20,161 @@ export type Frame = {
   chatMessage: Messages[];
 };
 
-// =========================================
-// MASTER AI PROMPT
-// =========================================
-
+// ===============================
+// MASTER PROMPT
+// ===============================
 const prompt = `
-Prompt:
+You are a senior frontend engineer and UI designer.
 
 userInput: {userInput}
 
-Instructions:
+========================
+TASK RULES
+========================
 
-1. If the user input is explicitly asking to generate code, design, or HTML/CSS/JS output (e.g., "Create a landing page", "Build a dashboard", "Generate HTML Tailwind CSS code"), then:
+If the user asks to generate a website, UI, dashboard, landing page, or any design/code:
 
-    - Generate a complete HTML Tailwind CSS code using Flowbite UI components.
-    - Use a modern design with blue as the primary color theme.
-    - Only include the <body> content (do not add <head> or <title>).
-    - Make it fully responsive for all screen sizes.
-    - All primary components must match the theme color.
-    - Add proper padding and margin for each element.
-    - Components should be independent; do not connect them.
-    - Use placeholders for all images:
-        - Light mode: https://community.softr.io/uploads/db9113/original/2X/7/74e0e7e302d0ff5d7773ca9a07e6f6f8817a68a6.jpeg
-        - Dark mode: https://www.albaky.com/wp-content/uploads/2015/12/placeholder-3.jpg
-        - Add alt tag describing the image prompt.
-    - Use the following libraries/components where appropriate:
-        - FontAwesome icons (fa fa-)
-        - Flowbite UI components
-        - Chart.js
-        - Swiper.js
-        - Tippy.js
-    - Include interactive components like modals, dropdowns, and accordions.
-    - Ensure proper spacing, alignment, hierarchy, and theme consistency.
-    - Ensure charts are visually appealing and match the theme color.
-    - Header menu options should be spread out and not connected.
-    - Do not include broken links.
-    - Return ONLY html code inside triple backticks like:
+- Generate a COMPLETE SINGLE-FILE WEBSITE
+- Include full HTML document structure:
+  <!DOCTYPE html>, <html>, <head>, <body>
+
+- Use Tailwind CSS via CDN:
+  <script src="https://cdn.tailwindcss.com"></script>
+
+- Add minimal but modern UI design (clean, startup style)
+- Make it FULLY RESPONSIVE (mobile + tablet + desktop)
+- Use modern layout patterns (grid, flex, cards, sections)
+- Add basic interactivity using vanilla JavaScript when needed
+- Use FontAwesome CDN if icons are required
+
+- Use placeholder images when needed:
+  https://community.softr.io/uploads/db9113/original/2X/7/74e0e7e302d0ff5d7773ca9a07e6f6f8817a68a6.jpeg
+
+========================
+OUTPUT RULES (VERY IMPORTANT)
+========================
+
+- Return ONLY ONE code block
+- No explanation
+- No text before or after
+- Always wrap output like this:
 
 \`\`\`html
-<div>...</div>
+<!DOCTYPE html>
+<html>
+...
+</html>
 \`\`\`
 
-    - Do not add explanations.
+========================
+NON-CODE REQUESTS
+========================
 
-2. If the user input is general text or greetings (e.g., "Hi", "Hello", "How are you?") or does not explicitly ask to generate code:
-
-    - Respond with a simple friendly message.
+If the user is not asking for code:
+- respond normally in short helpful text
 `;
 
 function PlaygroundPage() {
-  const { projectId } = useParams();
+  const params = useParams();
   const searchParams = useSearchParams();
-  const frameId = searchParams.get("frameId");
+
+  const projectId =
+    typeof params?.projectId === "string"
+      ? params.projectId
+      : Array.isArray(params?.projectId)
+        ? params.projectId[0]
+        : undefined;
+
+  const frameId = searchParams.get("frameId") || undefined;
+
   const [loading, setLoading] = useState(false);
   const [messages, setMessages] = useState<Messages[]>([]);
   const [generatedCode, setGeneratedCode] = useState("");
-  const [frameDetail, setFrameDetail] = useState<Frame>();
+  const [frameDetail, setFrameDetail] = useState<Frame | null>(null);
   const [initialPromptSent, setInitialPromptSent] = useState(false);
 
-  // =========================================
-  // GET FRAME DETAILS
-  // =========================================
+  // ===============================
+  // GET FRAME
+  // ===============================
+  const GetFrameDetails = useCallback(async () => {
+    if (!frameId || !projectId) return;
 
-  const GetFrameDetails = async () => {
     try {
       setLoading(true);
+
       const result = await axios.get(
         `/api/frames?frameId=${frameId}&projectId=${projectId}`,
       );
+
       const data = result.data;
       setFrameDetail(data);
-      // =========================
-      // SET CHAT
-      // =========================
+
       setMessages(data?.chatMessage || []);
-      // =========================
-      // HANDLE DESIGN CODE
-      // =========================
+
       const designCode = data?.designCode;
+
       if (!designCode) {
         setGeneratedCode("");
         return;
       }
-      // markdown html block
+
       if (designCode.includes("```html")) {
-        const startIndex = designCode.indexOf("```html") + 7;
-        const endIndex = designCode.lastIndexOf("```");
-        const cleanCode = designCode.slice(startIndex, endIndex).trim();
-        setGeneratedCode(cleanCode);
+        const start = designCode.indexOf("```html") + 7;
+        const end = designCode.lastIndexOf("```");
+        setGeneratedCode(designCode.slice(start, end).trim());
       } else {
-        // raw html
         setGeneratedCode(designCode);
       }
-    } catch (error) {
-      console.log(error);
+    } catch (err) {
+      console.error(err);
       toast.error("Failed to load frame");
     } finally {
       setLoading(false);
     }
-  };
-  // =========================================
-  // SAVE GENERATED CODE
-  // =========================================
+  }, [frameId, projectId]);
 
+  // ===============================
+  // SAVE CODE
+  // ===============================
   const SaveGeneratedCode = async (code: string) => {
     try {
-      await axios.put("/api/frames", { designCode: code, frameId, projectId });
+      await axios.put("/api/frames", {
+        designCode: code,
+        frameId,
+        projectId,
+      });
+
       toast.success("Website Ready!");
-    } catch (error) {
-      console.log(error);
+    } catch (err) {
+      console.error(err);
       toast.error("Failed to save code");
     }
   };
 
-  // =========================================
+  // ===============================
   // SEND MESSAGE
-  // =========================================
-
+  // ===============================
   const SendMessage = async (userInput: string) => {
+    if (!frameId || !projectId) return;
+
     try {
       setLoading(true);
 
-      // =========================
-      // CHAT HISTORY (ONLY USER)
-      // =========================
       const updatedMessages: Messages[] = [
         ...messages,
-        {
-          role: "user",
-          content: userInput,
-        },
+        { role: "user", content: userInput },
       ];
 
       setMessages(updatedMessages);
 
-      // =========================
-      // SYSTEM PROMPT (ONLY ONCE)
-      // =========================
       const systemPrompt = prompt.replace("{userInput}", userInput);
 
-      // =========================
-      // AI REQUEST
-      // =========================
       const response = await fetch("/api/ai-model", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           messages: [
-            {
-              role: "system",
-              content: systemPrompt,
-            },
+            { role: "system", content: systemPrompt },
             ...updatedMessages,
           ],
         }),
@@ -184,112 +186,100 @@ function PlaygroundPage() {
       if (!reader) throw new Error("No stream");
 
       const decoder = new TextDecoder();
+
       let aiResponse = "";
 
-      // =========================
-      // STREAM
-      // =========================
+      // create assistant placeholder (IMPORTANT FIX)
+      setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
+
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
 
-        const chunk = decoder.decode(value, { stream: true });
-        aiResponse += chunk;
+        aiResponse += decoder.decode(value, { stream: true });
 
-        // OPTIONAL: live update UI
         setMessages((prev) => {
           const copy = [...prev];
-          copy[copy.length - 1] = {
+          const lastIndex = copy.length - 1;
+
+          copy[lastIndex] = {
             role: "assistant",
             content: aiResponse,
           };
+
           return copy;
         });
       }
 
-      // =========================
+      // ===============================
       // EXTRACT HTML
-      // =========================
-      const match = aiResponse.match(/```html([\s\S]*?)```/);
-
-      if (!match) {
-        setMessages([
-          ...updatedMessages,
-          {
-            role: "assistant",
-            content: aiResponse,
-          },
-        ]);
-        return;
-      }
-
-      const cleanCode = match[1].trim();
-
-      setGeneratedCode(cleanCode);
+      // ===============================
+      const match = aiResponse.match(/```html\s*([\s\S]*?)```/i);
 
       const finalMessages: Messages[] = [
         ...updatedMessages,
         {
           role: "assistant",
-          content: "Website generated successfully",
+          content: match ? "Website generated successfully" : aiResponse,
         },
       ];
 
       setMessages(finalMessages);
 
-      await axios.put("/api/chats", { messages: finalMessages, frameId });
+      await axios.put("/api/chats", {
+        messages: finalMessages,
+        frameId,
+      });
 
-      await SaveGeneratedCode(cleanCode);
-    } catch (error) {
-      console.log(error);
+      if (match) {
+        const cleanCode = match[1].trim();
+        setGeneratedCode(cleanCode);
+        await SaveGeneratedCode(cleanCode);
+      }
+    } catch (err) {
+      console.error(err);
       toast.error("Something went wrong");
     } finally {
       setLoading(false);
     }
   };
 
-  // =========================================
-  // INITIAL FETCH
-  // =========================================
-
+  // ===============================
+  // INITIAL LOAD
+  // ===============================
   useEffect(() => {
-    if (frameId && projectId) {
-      GetFrameDetails();
-    }
-  }, [frameId, projectId]);
+    GetFrameDetails();
+  }, [GetFrameDetails]);
 
-  // =========================================
-  // AUTO GENERATE FIRST MESSAGE
-  // =========================================
-
+  // ===============================
+  // AUTO FIRST PROMPT
+  // ===============================
   useEffect(() => {
     if (
       frameDetail?.chatMessage?.length === 1 &&
       !frameDetail?.designCode &&
       !initialPromptSent
     ) {
-      const firstMsg = frameDetail.chatMessage[0]?.content;
-      if (firstMsg) {
+      const first = frameDetail.chatMessage[0]?.content;
+
+      if (first) {
         setInitialPromptSent(true);
-        SendMessage(firstMsg);
+        SendMessage(first);
       }
     }
-  }, [frameDetail]);
+  }, [frameDetail, initialPromptSent]);
 
   return (
     <div className="h-screen overflow-hidden">
-      {/* HEADER */}
       <PlaygroundHeader />
-      {/* MAIN */}
+
       <div className="flex h-[calc(100vh-73px)] bg-gray-100">
-        {/* CHAT */}
         <ChatSection
           messages={messages}
           loading={loading}
           onSend={SendMessage}
         />
 
-        {/* WEBSITE */}
         <WebsiteDesign code={generatedCode} />
       </div>
     </div>

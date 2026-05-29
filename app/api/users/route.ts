@@ -5,23 +5,39 @@ import { usersTable } from "@/config/schema";
 import { eq } from "drizzle-orm";
 
 export async function POST(req: NextRequest) {
-  const user = await currentUser();
-  const userResult = await db
-    .select()
-    .from(usersTable)
-    .where(eq(usersTable.email, user?.primaryEmailAddress?.emailAddress));
+  try {
+    const user = await currentUser();
 
-  if (userResult?.length === 0) {
-    const data = {
-      name: user?.fullName ?? "NA",
-      email: user?.primaryEmailAddress?.emailAddress ?? "",
-      credits: 2,
-    };
+    const email = user?.primaryEmailAddress?.emailAddress;
 
-    const result = await db.insert(usersTable).values({
-      ...data,
-    });
-    return NextResponse.json({ user: data });
+    if (!user || !email) {
+      return NextResponse.json({ error: "Unauthorized user" }, { status: 401 });
+    }
+
+    const userResult = await db
+      .select()
+      .from(usersTable)
+      .where(eq(usersTable.email, email));
+
+    if (userResult.length === 0) {
+      const newUser = {
+        name: user.fullName ?? "NA",
+        email,
+        credits: 2,
+      };
+
+      await db.insert(usersTable).values(newUser);
+
+      return NextResponse.json({ user: newUser });
+    }
+
+    return NextResponse.json({ user: userResult[0] });
+  } catch (error) {
+    console.error("USER API ERROR:", error);
+
+    return NextResponse.json(
+      { error: "Internal Server Error" },
+      { status: 500 },
+    );
   }
-  return NextResponse.json({ user: userResult[0] });
 }

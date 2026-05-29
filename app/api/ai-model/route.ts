@@ -24,63 +24,51 @@ export async function POST(req: NextRequest) {
       responseType: "stream",
     });
 
+    const encoder = new TextEncoder();
     const stream = response.data;
 
-    const encoder = new TextEncoder();
-
     const readable = new ReadableStream({
-      async start(controller) {
+      start(controller) {
         let buffer = "";
 
-        try {
-          for await (const chunk of stream) {
-            buffer += chunk.toString();
+        stream.on("data", (chunk: Buffer) => {
+          buffer += chunk.toString();
 
-            const lines = buffer.split("\n");
+          const lines = buffer.split("\n");
+          buffer = lines.pop() || "";
 
-            // keep incomplete line in buffer
-            buffer = lines.pop() || "";
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed.startsWith("data:")) continue;
 
-            for (const line of lines) {
-              const trimmedLine = line.trim();
+            const data = trimmed.replace("data: ", "");
 
-              if (!trimmedLine) continue;
+            if (data === "[DONE]") {
+              controller.close();
+              return;
+            }
 
-              // skip comments or invalid lines
-              if (!trimmedLine.startsWith("data:")) continue;
+            try {
+              const json = JSON.parse(data);
+              const content = json?.choices?.[0]?.delta?.content;
 
-              const message = trimmedLine.replace(/^data:\s*/, "");
-
-              if (message === "[DONE]") {
-                controller.close();
-                return;
+              if (content) {
+                controller.enqueue(encoder.encode(content));
               }
-
-              try {
-                const parsed = JSON.parse(message);
-
-                const content = parsed.choices?.[0]?.delta?.content || "";
-
-                if (content) {
-                  controller.enqueue(encoder.encode(content));
-                }
-              } catch (err) {
-                console.log("JSON Parse Error:", err);
-              }
+            } catch (err) {
+              // ignore broken chunks safely
             }
           }
+        });
 
-          controller.close();
-        } catch (err) {
-          console.log("Streaming error:", err);
-          controller.error(err);
-        }
+        stream.on("end", () => controller.close());
+        stream.on("error", (err: any) => controller.error(err));
       },
     });
 
     return new NextResponse(readable, {
       headers: {
-        "Content-Type": "text/plain; charset=utf-8",
+        "Content-Type": "text/event-stream",
         "Cache-Control": "no-cache",
         Connection: "keep-alive",
       },
@@ -89,9 +77,7 @@ export async function POST(req: NextRequest) {
     console.log("API ERROR:", error?.response?.data || error.message);
 
     return NextResponse.json(
-      {
-        error: "Something went wrong",
-      },
+      { error: "Something went wrong" },
       { status: 500 },
     );
   }
