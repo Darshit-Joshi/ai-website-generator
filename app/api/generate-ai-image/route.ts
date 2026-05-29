@@ -36,7 +36,7 @@ export async function POST(req: NextRequest) {
     const generatedUrl = imagekit.url({
       path: `/ik-genimg-prompt-${sanitizedPrompt}/generated-ui-asset-${Date.now()}.png`,
       signed: true, // Bypasses endpoint protection restrictions
-      expiresIn: 600, // Link remains active to fetch for 10 minutes
+      expireSeconds: 600, // Link remains active to fetch for 10 minutes
     });
 
     return NextResponse.json({ url: generatedUrl });

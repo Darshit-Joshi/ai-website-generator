@@ -129,17 +129,21 @@ function ImageSettingSection({ selectedEl, setGeneratedCode }: Props) {
 
     try {
       setLoading(true);
+
+      // Revert back to using standard high-performance multipart boundary forms
       const formData = new FormData();
       formData.append("file", selectedImage);
 
       const res = await fetch("/api/upload-image", {
         method: "POST",
+        // Do NOT pass custom Content-Type headers here; the browser needs to set its own form boundaries!
         body: formData,
       });
 
       const data = await res.json();
-      if (!res.ok)
+      if (!res.ok) {
         throw new Error(data.error || "Image Upload Processing Rejected");
+      }
 
       setPreview(data.url);
       syncCanvasCodeAndDOM({ src: data.url });
