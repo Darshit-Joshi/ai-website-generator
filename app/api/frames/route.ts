@@ -17,14 +17,17 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    // 1. Get frame
+    const safeFrameId = frameId;
+    const safeProjectId = projectId;
+
+    // Get frame
     const frameResult = await db
       .select()
       .from(frameTable)
       .where(
         and(
-          eq(frameTable.frameId, frameId),
-          eq(frameTable.projectId, projectId),
+          eq(frameTable.frameId, safeFrameId),
+          eq(frameTable.projectId, safeProjectId),
         ),
       );
 
@@ -32,18 +35,16 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Frame not found" }, { status: 404 });
     }
 
-    // 2. Get chats
+    // Get chats (FIXED: use safeFrameId)
     const chatResult = await db
       .select()
       .from(chatTable)
-      .where(eq(chatTable.frameId, frameId));
+      .where(eq(chatTable.frameId, safeFrameId));
 
-    const finalResult = {
+    return NextResponse.json({
       ...frameResult[0],
-      chats: chatResult, // return full chat array (correct)
-    };
-
-    return NextResponse.json(finalResult);
+      chats: chatResult,
+    });
   } catch (error) {
     console.error("GET ERROR:", error);
 
