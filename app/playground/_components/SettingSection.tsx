@@ -261,7 +261,7 @@ function SettingSection({
         </label>
         <Select
           value={styles.fontSize}
-          onValueChange={(value) => applyStyle("fontSize", value)}
+          onValueChange={(value) => applyStyle("fontSize", value ?? "")}
         >
           <SelectTrigger className="h-9">
             <SelectValue placeholder="Select dimension" />
