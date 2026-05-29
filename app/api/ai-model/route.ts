@@ -7,6 +7,13 @@ export async function POST(req: NextRequest) {
   try {
     const { messages } = await req.json();
 
+    if (!messages || !Array.isArray(messages)) {
+      return NextResponse.json(
+        { error: "Messages payload array is required" },
+        { status: 400 },
+      );
+    }
+
     const response = await axios({
       method: "post",
       url: "https://openrouter.ai/api/v1/chat/completions",
@@ -18,13 +25,15 @@ export async function POST(req: NextRequest) {
       headers: {
         Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
         "Content-Type": "application/json",
-        "HTTP-Referer": "http://localhost:3000",
+        "HTTP-Referer":
+          process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000",
         "X-Title": "AI Website Builder",
       },
       responseType: "stream",
     });
 
     const encoder = new TextEncoder();
+    const decoder = new TextDecoder("utf-8", { fatal: false });
     const stream = response.data;
 
     const readable = new ReadableStream({
@@ -32,52 +41,71 @@ export async function POST(req: NextRequest) {
         let buffer = "";
 
         stream.on("data", (chunk: Buffer) => {
-          buffer += chunk.toString();
+          // Decode incoming fragments into unified safe string patterns
+          buffer += decoder.decode(chunk, { stream: true });
 
           const lines = buffer.split("\n");
           buffer = lines.pop() || "";
 
           for (const line of lines) {
             const trimmed = line.trim();
-            if (!trimmed.startsWith("data:")) continue;
+            if (!trimmed || !trimmed.startsWith("data:")) continue;
 
-            const data = trimmed.replace("data: ", "");
+            const dataContent = trimmed.replace(/^data:\s*/, "");
 
-            if (data === "[DONE]") {
+            if (dataContent === "[DONE]") {
               controller.close();
               return;
             }
 
             try {
-              const json = JSON.parse(data);
+              const json = JSON.parse(dataContent);
               const content = json?.choices?.[0]?.delta?.content;
 
               if (content) {
                 controller.enqueue(encoder.encode(content));
               }
             } catch (err) {
-              // ignore broken chunks safely
+              // Gracefully bypass structural anomalies within rapid streaming updates
             }
           }
         });
 
-        stream.on("end", () => controller.close());
+        stream.on("end", () => {
+          if (buffer.trim().startsWith("data:")) {
+            try {
+              const dataContent = buffer.trim().replace(/^data:\s*/, "");
+              if (dataContent !== "[DONE]") {
+                const json = JSON.parse(dataContent);
+                const content = json?.choices?.[0]?.delta?.content;
+                if (content) controller.enqueue(encoder.encode(content));
+              }
+            } catch (e) {
+              // Ignore boundary string remainders
+            }
+          }
+          controller.close();
+        });
+
         stream.on("error", (err: any) => controller.error(err));
       },
     });
 
     return new NextResponse(readable, {
       headers: {
-        "Content-Type": "text/event-stream",
-        "Cache-Control": "no-cache",
+        "Content-Type": "text/event-stream; charset=utf-8",
+        "Cache-Control": "no-cache, no-transform",
         Connection: "keep-alive",
+        "X-Accel-Buffering": "no", // Disables compression layer throttling on Vercel/Nginx networks
       },
     });
   } catch (error: any) {
-    console.log("API ERROR:", error?.response?.data || error.message);
-
+    console.error(
+      "OpenRouter Stream Router Error:",
+      error?.response?.data || error.message,
+    );
     return NextResponse.json(
-      { error: "Something went wrong" },
+      { error: "Something went wrong processing your AI model stream request" },
       { status: 500 },
     );
   }

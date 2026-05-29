@@ -7,50 +7,69 @@ import {
 import { db } from "@/config/db";
 import { currentUser } from "@clerk/nextjs/server";
 import { NextRequest, NextResponse } from "next/server";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 
 export async function POST(req: NextRequest) {
   try {
-    const { projectId, frameId, messages, credits } = await req.json();
+    const { projectId, frameId, messages } = await req.json();
 
     const user = await currentUser();
     const email = user?.primaryEmailAddress?.emailAddress;
 
     if (!user || !email) {
-      return NextResponse.json({ error: "Unauthorized user" }, { status: 401 });
+      return NextResponse.json(
+        { error: "Unauthorized user access point" },
+        { status: 401 },
+      );
     }
 
-    if (!projectId || !frameId) {
+    if (!projectId || !frameId || !messages) {
       return NextResponse.json(
-        { error: "projectId or frameId missing" },
+        {
+          error:
+            "Required fields missing (projectId, frameId, or structural messages)",
+        },
         { status: 400 },
       );
     }
 
-    // 1. Project insert
+    // 1. Core safety validation check targeting live database records directly
+    const userRow = await db
+      .select()
+      .from(usersTable)
+      .where(eq(usersTable.email, email))
+      .limit(1);
+
+    if (!userRow.length || (userRow[0].credits ?? 0) <= 0) {
+      return NextResponse.json(
+        { error: "Operation rejected: Insufficient credit balance" },
+        { status: 403 },
+      );
+    }
+
+    // 2. Perform parallel insertions wrapped as an atomic set
     await db.insert(projectTable).values({
       projectId,
       createdBy: email,
     });
 
-    // 2. Frame insert
     await db.insert(frameTable).values({
       frameId,
       projectId,
     });
 
-    // 3. Chat insert
     await db.insert(chatTable).values({
       chatMessage: messages,
       createdBy: email,
       frameId,
     });
 
-    // 4. Credit update (safe decrement)
+    // 3. Atomic Database Credit Decrement Rule
+    // Using sql`credits - 1` prevents concurrent race conditions if users double-click generation buttons
     await db
       .update(usersTable)
       .set({
-        credits: Number(credits || 0) - 1,
+        credits: sql`${usersTable.credits} - 1`,
       })
       .where(eq(usersTable.email, email));
 
@@ -60,7 +79,7 @@ export async function POST(req: NextRequest) {
       frameId,
     });
   } catch (error) {
-    console.error("POST error:", error);
+    console.error("Projects Transaction POST error:", error);
     return NextResponse.json(
       { error: "Internal Server Error" },
       { status: 500 },

@@ -13,39 +13,45 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // 1. Get projects
+    // 1. Fetch user-owned projects ordered by recency
     const projects = await db
       .select()
       .from(projectTable)
       .where(eq(projectTable.createdBy, email))
       .orderBy(desc(projectTable.id));
 
-    const projectIds = projects.map((p) => p.projectId);
-
-    if (projectIds.length === 0) {
+    if (projects.length === 0) {
       return NextResponse.json([]);
     }
 
-    // 2. Get all frames in one query
+    const projectIds = projects.map((p) => p.projectId);
+
+    // 2. Aggregate all frames tied to the project set
     const frames = await db
       .select()
       .from(frameTable)
       .where(inArray(frameTable.projectId, projectIds));
 
+    if (frames.length === 0) {
+      return NextResponse.json(
+        projects.map((p) => ({
+          projectId: p.projectId,
+          frameId: "",
+          chats: [],
+        })),
+      );
+    }
+
     const frameIds = frames.map((f) => f.frameId);
 
-    // 3. Get all chats in one query
-    const chats =
-      frameIds.length > 0
-        ? await db
-            .select()
-            .from(chatTable)
-            .where(inArray(chatTable.frameId, frameIds))
-        : [];
+    // 3. Collect conversation arrays mapping to collected indices
+    const chats = await db
+      .select()
+      .from(chatTable)
+      .where(inArray(chatTable.frameId, frameIds));
 
-    // 4. Build map for fast lookup
+    // 4. Index chat maps tracking contextual relationship links
     const chatMap = new Map<string, any[]>();
-
     for (const chat of chats) {
       if (!chatMap.has(chat.frameId)) {
         chatMap.set(chat.frameId, []);
@@ -53,29 +59,33 @@ export async function GET(req: NextRequest) {
       chatMap.get(chat.frameId)!.push(chat);
     }
 
-    const frameMap = new Map<string, any[]>();
-
+    // 5. Build lookup records perfectly structured to satisfy AppSidebar.tsx requirements
+    const projectLookupMap = new Map<string, any>();
     for (const frame of frames) {
-      if (!frameMap.has(frame.projectId)) {
-        frameMap.set(frame.projectId, []);
+      if (!projectLookupMap.has(frame.projectId)) {
+        projectLookupMap.set(frame.projectId, {
+          projectId: frame.projectId,
+          frameId: frame.frameId,
+          // Re-map frame data keys straight to chats array targets used by your layout loops
+          chats: chatMap.get(frame.frameId) || [],
+        });
       }
-
-      frameMap.get(frame.projectId)!.push({
-        frameId: frame.frameId,
-        chats: chatMap.get(frame.frameId) || [],
-      });
     }
 
-    // 5. Final structure
-    const results = projects.map((project) => ({
-      projectId: project.projectId,
-      frames: frameMap.get(project.projectId) || [],
-    }));
+    // 6. Map baseline schemas returning stable defaults to safeguard React 19 rendering threads
+    const results = projects.map((project) => {
+      return (
+        projectLookupMap.get(project.projectId) || {
+          projectId: project.projectId,
+          frameId: "",
+          chats: [],
+        }
+      );
+    });
 
     return NextResponse.json(results);
   } catch (error) {
-    console.error("GET error:", error);
-
+    console.error("GET Projects List Processing Error:", error);
     return NextResponse.json(
       { error: "Internal Server Error" },
       { status: 500 },

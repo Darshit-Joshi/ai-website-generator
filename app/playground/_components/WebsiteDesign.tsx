@@ -1,6 +1,12 @@
 "use client";
 
-import React, { useEffect, useRef, useState, useContext } from "react";
+import React, {
+  useEffect,
+  useRef,
+  useState,
+  useContext,
+  useCallback,
+} from "react";
 import axios from "axios";
 import { toast } from "sonner";
 import { useParams, useSearchParams } from "next/navigation";
@@ -20,12 +26,16 @@ const HTML_CODE = `
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/lucide@latest"></script>
+  <style>
+    [contenteditable="true"]:focus {
+      outline: 3px dashed #3b82f6 !important;
+      outline-offset: 2px;
+    }
+  </style>
 </head>
-
-<body>
+<body class="bg-transparent m-0 p-0">
   <div id="root"></div>
 </body>
 </html>
@@ -34,16 +44,39 @@ const HTML_CODE = `
 function WebsiteDesign({ code }: Props) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
-  const [generatedCode, setGeneratedCode] = useState(code);
+  const [generatedCode, setGeneratedCode] = useState("");
   const [selectedScreenSize, setSelectedScreenSize] = useState("web");
   const [selectedEl, setSelectedEl] = useState<HTMLElement | null>(null);
 
-  const { onSaveData } = useContext(OnSaveContext);
   const { projectId } = useParams();
   const searchParams = useSearchParams();
   const frameId = searchParams.get("frameId");
+  const context = useContext(OnSaveContext);
 
-  // ================= INIT IFRAME =================
+  // ==========================================
+  // LIVE IFRAME SOURCE TO STATE SYNCHRONIZER
+  // ==========================================
+  const syncFromIframe = useCallback(() => {
+    const iframe = iframeRef.current;
+    const doc = iframe?.contentDocument;
+    const root = doc?.getElementById("root");
+
+    if (root) {
+      // Rebuild clean canvas HTML source blocks safely removing editor states
+      const clone = root.cloneNode(true) as HTMLElement;
+      clone.querySelectorAll("*").forEach((el) => {
+        el.removeAttribute("contenteditable");
+        if ((el as HTMLElement).style.outline === "2px solid red") {
+          (el as HTMLElement).style.outline = "";
+        }
+      });
+      setGeneratedCode(clone.innerHTML.trim());
+    }
+  }, []);
+
+  // ==========================================
+  // CORE IFRAME INTERACTIVE MOUNT ENGINE
+  // ==========================================
   useEffect(() => {
     const iframe = iframeRef.current;
     if (!iframe) return;
@@ -55,122 +88,138 @@ function WebsiteDesign({ code }: Props) {
     doc.write(HTML_CODE);
     doc.close();
 
-    let activeEl: HTMLElement | null = null;
+    // Use a state-independent variable inside the execution boundary to manage node tracking safely
+    let internalSelectedNode: HTMLElement | null = null;
 
     const handleClick = (e: MouseEvent) => {
       const target = e.target as HTMLElement;
-      if (!target || target.tagName === "BODY" || target.tagName === "HTML")
+      if (
+        !target ||
+        target.tagName === "BODY" ||
+        target.tagName === "HTML" ||
+        target.id === "root"
+      )
         return;
 
       e.preventDefault();
+      e.stopPropagation();
 
-      if (activeEl) {
-        activeEl.style.outline = "";
-        activeEl.removeAttribute("contenteditable");
+      // Clean up previously selected items
+      if (internalSelectedNode) {
+        internalSelectedNode.style.outline = "";
+        internalSelectedNode.removeAttribute("contenteditable");
       }
 
-      activeEl = target;
-      activeEl.style.outline = "2px solid red";
+      // Context-anchor target element selection state references
+      internalSelectedNode = target;
+      internalSelectedNode.style.outline = "2px solid red";
 
-      if (!["IMG", "BUTTON", "SVG"].includes(target.tagName)) {
-        activeEl.setAttribute("contenteditable", "true");
+      if (!["IMG", "BUTTON", "SVG", "A"].includes(target.tagName)) {
+        internalSelectedNode.setAttribute("contenteditable", "true");
       }
 
-      setSelectedEl(target);
+      setSelectedEl(internalSelectedNode);
+      syncFromIframe();
     };
 
-    const waitForBody = () => {
-      if (!doc.body) return requestAnimationFrame(waitForBody);
+    const handleInputEvent = () => {
+      syncFromIframe();
+    };
+
+    const attachEditorListeners = () => {
+      if (!doc.body) return requestAnimationFrame(attachEditorListeners);
+
       doc.body.addEventListener("click", handleClick);
+      doc.body.addEventListener("input", handleInputEvent);
+      doc.body.addEventListener("blur", handleInputEvent, true);
     };
 
-    waitForBody();
+    attachEditorListeners();
+
+    // ==========================================
+    // PREVIEW DECOUPLED RELOAD EVENT LISTENER
+    // ==========================================
+    const handleCanvasRefreshSignal = () => {
+      if (iframe.contentWindow) {
+        iframe.contentWindow.location.reload();
+      }
+    };
+    window.addEventListener(
+      "generator-preview-reload",
+      handleCanvasRefreshSignal,
+    );
 
     return () => {
       doc.body?.removeEventListener("click", handleClick);
+      doc.body?.removeEventListener("input", handleInputEvent);
+      doc.body?.removeEventListener("blur", handleInputEvent, true);
+      window.removeEventListener(
+        "generator-preview-reload",
+        handleCanvasRefreshSignal,
+      );
     };
-  }, []);
+  }, [syncFromIframe]);
 
-  // ================= INJECT / SYNC CODE =================
+  // ==========================================
+  // INITIAL CODE INJECTION BOUNDARY
+  // ==========================================
   useEffect(() => {
+    if (!code) return;
+
     const iframe = iframeRef.current;
-    if (!iframe) return;
+    const doc = iframe?.contentDocument;
+    const root = doc?.getElementById("root");
+    if (!root || !doc) return;
 
-    const doc = iframe.contentDocument;
-    if (!doc) return;
+    const cleanHTML = code
+      .replace(/```html/g, "")
+      .replace(/```/g, "")
+      .trim();
 
-    const root = doc.getElementById("root");
-    if (!root) return;
+    // Only overwrite internal HTML markup nodes if state caches show discrepancies
+    // This blocks dangerous text cursor jumping loops when typing in contenteditables
+    if (root.innerHTML.trim() !== cleanHTML) {
+      root.innerHTML = cleanHTML;
+      setGeneratedCode(cleanHTML);
 
-    const clean =
-      code
-        ?.replace(/```html/g, "")
-        .replace(/```/g, "")
-        .trim() || "";
-
-    root.innerHTML = clean;
-
-    setGeneratedCode(clean); // 🔥 IMPORTANT: sync state with iframe
-
-    const win = iframe.contentWindow as any;
-    win?.lucide?.createIcons?.();
+      const win = iframe.contentWindow as any;
+      win?.lucide?.createIcons?.();
+    }
   }, [code]);
 
-  // ================= LIVE DOM → STATE SYNC =================
-  const syncFromIframe = () => {
-    const iframe = iframeRef.current;
-    if (!iframe) return;
+  // ==========================================
+  // PRODUCTION DATA STORAGE PERSISTENCE SAVER
+  // ==========================================
+  const executeSavePipeline = useCallback(async () => {
+    if (!generatedCode) return;
 
-    const doc = iframe.contentDocument;
-    if (!doc) return;
-
-    const root = doc.getElementById("root");
-    if (!root) return;
-
-    setGeneratedCode(root.innerHTML); // 🔥 SOURCE OF TRUTH
-  };
-
-  // ================= SAVE =================
-  const save = async () => {
     try {
-      const iframe = iframeRef.current;
-      if (!iframe) return;
-
-      const doc = iframe.contentDocument;
-      if (!doc) return;
-
-      const clone = doc.documentElement.cloneNode(true) as HTMLElement;
-
-      clone.querySelectorAll("*").forEach((el) => {
-        el.removeAttribute("contenteditable");
-        (el as HTMLElement).style.outline = "";
-      });
-
+      // Reconstruct and save only clean layout templates, avoiding configuration context leaks
       await axios.put("/api/frames", {
-        designCode: clone.outerHTML,
+        designCode: generatedCode,
         frameId,
         projectId,
       });
-
-      toast.success("Saved");
-    } catch {
-      toast.error("Save failed");
+      toast.success("Workspace layout persisted successfully!");
+    } catch (err) {
+      console.error("Save processing aborted:", err);
+      toast.error("Cloud architecture rejected save context state payload");
     }
-  };
+  }, [generatedCode, frameId, projectId]);
 
   useEffect(() => {
-    if (onSaveData) save();
-  }, [onSaveData]);
+    if (context?.onSaveData) {
+      executeSavePipeline();
+    }
+  }, [context?.onSaveData, executeSavePipeline]);
 
-  // ================= UI =================
   return (
-    <div className="flex w-full h-full">
-      {/* LEFT */}
-      <div className="flex flex-col flex-1 h-full p-4">
-        {/* PREVIEW */}
-        <div className="flex-1 flex justify-center bg-gray-100 p-4">
+    <div className="flex w-full h-full bg-muted/10 select-none">
+      {/* PREVIEW FRAME SPACE BLOCK */}
+      <div className="flex flex-col flex-1 h-full p-4 min-w-0">
+        <div className="flex-1 flex justify-center items-center bg-gray-100 p-2 rounded-xl border shadow-inner overflow-hidden relative">
           <div
-            className="h-full border bg-white transition-all duration-300"
+            className="h-full bg-white border shadow-md transition-all duration-300 rounded-lg overflow-hidden"
             style={{
               width: selectedScreenSize === "web" ? "100%" : "375px",
             }}
@@ -178,26 +227,24 @@ function WebsiteDesign({ code }: Props) {
             <iframe
               ref={iframeRef}
               sandbox="allow-scripts allow-same-origin"
-              className="w-full h-full border bg-white"
-              onInput={syncFromIframe} // 🔥 live sync hook
-              onBlur={syncFromIframe}
+              className="w-full h-full m-0 p-0 border-none bg-white select-text"
             />
           </div>
         </div>
 
-        {/* TOOLS */}
-        <div className="shrink-0">
+        {/* WEB DESIGN UTILITY FOOTER COMPONENT */}
+        <div className="shrink-0 pt-2">
           <WebpageTools
             selectedScreenSize={selectedScreenSize}
             setSelectedScreenSize={setSelectedScreenSize}
-            generatedCode={generatedCode} // 🔥 NOW REAL SOURCE
+            generatedCode={generatedCode}
           />
         </div>
       </div>
 
-      {/* RIGHT SIDEBAR */}
+      {/* RIGHT WORKSPACE CONTEXT FIELD SIDEBARS */}
       {selectedEl && (
-        <div className="w-[380px] border-l bg-white overflow-y-auto h-full">
+        <div className="w-[380px] shrink-0 border-l bg-white h-full relative shadow-xl animate-in slide-in-from-right duration-200">
           {selectedEl.tagName === "IMG" ? (
             <ImageSettingSection
               selectedEl={selectedEl as HTMLImageElement}
@@ -207,6 +254,7 @@ function WebsiteDesign({ code }: Props) {
             <SettingSection
               selectedEl={selectedEl}
               clearSelection={() => setSelectedEl(null)}
+              setGeneratedCode={setGeneratedCode}
             />
           )}
         </div>

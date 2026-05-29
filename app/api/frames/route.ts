@@ -1,7 +1,7 @@
-import { chatTable, frameTable } from "@/config/schema";
 import { NextRequest, NextResponse } from "next/server";
 import { eq, and } from "drizzle-orm";
 import { db } from "@/config/db";
+import { chatTable, frameTable } from "@/config/schema";
 
 export async function GET(req: NextRequest) {
   try {
@@ -16,25 +16,28 @@ export async function GET(req: NextRequest) {
       );
     }
 
+    // Querying the frame details securely using table references
     const frameResult = await db
       .select()
       .from(frameTable)
       .where(
         and(
           eq(frameTable.frameId, frameId),
-          eq(frameTable.projectId, projectId as string | null),
+          eq(frameTable.projectId, projectId),
         ),
       );
-
-    const chatResult = await db
-      .select()
-      .from(chatTable)
-      .where(eq(chatTable.frameId, frameId));
 
     if (!frameResult.length) {
       return NextResponse.json({ error: "Frame not found" }, { status: 404 });
     }
 
+    // Querying associated chat conversation history for this frame
+    const chatResult = await db
+      .select()
+      .from(chatTable)
+      .where(eq(chatTable.frameId, frameId));
+
+    // Combining structural frame properties with historical chat arrays
     const finalResult = {
       ...frameResult[0],
       chatMessage: chatResult[0]?.chatMessage || [],
@@ -42,7 +45,7 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json(finalResult);
   } catch (error) {
-    console.error(error);
+    console.error("Frames GET API Error:", error);
     return NextResponse.json(
       { error: "Internal Server Error" },
       { status: 500 },
@@ -52,7 +55,8 @@ export async function GET(req: NextRequest) {
 
 export async function PUT(req: NextRequest) {
   try {
-    const { designCode, frameId, projectId } = await req.json();
+    const body = await req.json();
+    const { designCode, frameId, projectId } = body;
 
     if (!frameId || !projectId) {
       return NextResponse.json(
@@ -61,22 +65,22 @@ export async function PUT(req: NextRequest) {
       );
     }
 
-    const result = await db
+    // Direct updating targeting precise index combinations safely
+    await db
       .update(frameTable)
       .set({
         designCode: designCode,
       })
       .where(
         and(
-          eq(frameTable.frameId, frameId as string),
-          // 👇 This explicitly satisfies the "string | null" overload required by Drizzle
-          eq(frameTable.projectId, projectId as string | null),
+          eq(frameTable.frameId, frameId),
+          eq(frameTable.projectId, projectId),
         ),
       );
 
     return NextResponse.json({ result: "Updated" });
   } catch (error) {
-    console.error(error);
+    console.error("Frames PUT API Error:", error);
     return NextResponse.json(
       { error: "Internal Server Error" },
       { status: 500 },
