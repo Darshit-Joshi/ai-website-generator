@@ -24,7 +24,15 @@ export async function GET(req: NextRequest) {
       return NextResponse.json([]);
     }
 
-    const projectIds = projects.map((p) => p.projectId);
+    // FIX 1: Filter out any null/undefined projectIds and explicitly tell TypeScript they are strict strings
+    const projectIds = projects
+      .map((p) => p.projectId)
+      .filter((id): id is string => id !== null && id !== undefined);
+
+    // Safety Check: If no valid project IDs exist, return early to prevent inArray() from crashing
+    if (projectIds.length === 0) {
+      return NextResponse.json([]);
+    }
 
     // 2. Aggregate all frames tied to the project set
     const frames = await db
@@ -42,7 +50,21 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    const frameIds = frames.map((f) => f.frameId);
+    // FIX 2: Filter out any null/undefined frameIds and explicitly tell TypeScript they are strict strings
+    const frameIds = frames
+      .map((f) => f.frameId)
+      .filter((id): id is string => id !== null && id !== undefined);
+
+    // Safety Check: If no valid frame IDs exist, skip the chat query and return structure early
+    if (frameIds.length === 0) {
+      return NextResponse.json(
+        projects.map((p) => ({
+          projectId: p.projectId,
+          frameId: "",
+          chats: [],
+        })),
+      );
+    }
 
     // 3. Collect conversation arrays mapping to collected indices
     const chats = await db
@@ -53,29 +75,35 @@ export async function GET(req: NextRequest) {
     // 4. Index chat maps tracking contextual relationship links
     const chatMap = new Map<string, any[]>();
     for (const chat of chats) {
-      if (!chatMap.has(chat.frameId)) {
-        chatMap.set(chat.frameId, []);
+      if (chat.frameId) {
+        // Extra safety check for mapping keys
+        if (!chatMap.has(chat.frameId)) {
+          chatMap.set(chat.frameId, []);
+        }
+        chatMap.get(chat.frameId)!.push(chat);
       }
-      chatMap.get(chat.frameId)!.push(chat);
     }
 
     // 5. Build lookup records perfectly structured to satisfy AppSidebar.tsx requirements
     const projectLookupMap = new Map<string, any>();
     for (const frame of frames) {
-      if (!projectLookupMap.has(frame.projectId)) {
-        projectLookupMap.set(frame.projectId, {
-          projectId: frame.projectId,
-          frameId: frame.frameId,
-          // Re-map frame data keys straight to chats array targets used by your layout loops
-          chats: chatMap.get(frame.frameId) || [],
-        });
+      if (frame.projectId && frame.frameId) {
+        // Ensure keys exist before setting up map layouts
+        if (!projectLookupMap.has(frame.projectId)) {
+          projectLookupMap.set(frame.projectId, {
+            projectId: frame.projectId,
+            frameId: frame.frameId,
+            // Re-map frame data keys straight to chats array targets used by your layout loops
+            chats: chatMap.get(frame.frameId) || [],
+          });
+        }
       }
     }
 
     // 6. Map baseline schemas returning stable defaults to safeguard React 19 rendering threads
     const results = projects.map((project) => {
       return (
-        projectLookupMap.get(project.projectId) || {
+        projectLookupMap.get(project.projectId || "") || {
           projectId: project.projectId,
           frameId: "",
           chats: [],
