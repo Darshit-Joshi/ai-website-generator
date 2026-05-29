@@ -24,7 +24,8 @@ export async function GET(req: NextRequest) {
       .where(
         and(
           eq(frameTable.frameId, frameId),
-          eq(frameTable.projectId, projectId),
+          // 👇 Cast or provide a fallback so TypeScript knows it matches the column's nullable type signature
+          eq(frameTable.projectId, projectId as string | null),
         ),
       );
 
@@ -69,7 +70,8 @@ export async function PUT(req: NextRequest) {
       .where(
         and(
           eq(frameTable.frameId, frameId),
-          eq(frameTable.projectId, projectId),
+          // 👇 Do the same casting here to satisfy the overload signature
+          eq(frameTable.projectId, projectId as string | null),
         ),
       );
 
