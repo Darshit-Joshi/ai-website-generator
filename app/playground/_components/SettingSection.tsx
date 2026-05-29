@@ -318,8 +318,14 @@ function SettingSection({
         </label>
         <ToggleGroup
           type="single"
-          value={styles.textAlign as any} // 👈 Force bypass the type strictness
-          onValueChange={(value) => value && applyStyle("textAlign", value)}
+          value={styles.textAlign}
+          onValueChange={(value: string[]) => {
+            // value is an array, so get the first item (e.g., ["left"])
+            const singleValue = value[0];
+            if (singleValue) {
+              applyStyle("textAlign", singleValue);
+            }
+          }}
         >
           <ToggleGroupItem
             value="left"
