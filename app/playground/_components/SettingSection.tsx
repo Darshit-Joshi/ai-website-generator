@@ -312,42 +312,48 @@ function SettingSection({
       </div>
 
       {/* ALIGNMENT */}
+      {/* ALIGNMENT */}
       <div className="mb-5">
         <label className="mb-1.5 block text-xs font-semibold text-muted-foreground uppercase tracking-wider">
           Text Alignment
         </label>
-        {/* FIXED: Added type-ignore explicitly above the component opening token wrapper */}
-        {/* @ts-ignore */}
-        <ToggleGroup
-          type="single"
-          value={styles.textAlign}
-          onValueChange={(value: any) => {
-            // Accommodates both single strings and fallback array instances safely
-            const singleValue = Array.isArray(value) ? value[0] : value;
-            if (singleValue) {
-              applyStyle("textAlign", singleValue);
-            }
-          }}
-        >
-          <ToggleGroupItem
-            value="left"
-            className="h-8 rounded-md data-[state=on]:bg-white data-[state=on]:shadow-sm"
+        <div className="flex rounded-lg border p-1 bg-muted/20 gap-1 w-fit">
+          <button
+            type="button"
+            onClick={() => applyStyle("textAlign", "left")}
+            className={`h-8 w-10 flex items-center justify-center rounded-md transition-all ${
+              styles.textAlign === "left"
+                ? "bg-white text-foreground shadow-sm font-semibold border"
+                : "text-muted-foreground hover:bg-muted/50"
+            }`}
           >
             <AlignLeft className="h-4 w-4" />
-          </ToggleGroupItem>
-          <ToggleGroupItem
-            value="center"
-            className="h-8 rounded-md data-[state=on]:bg-white data-[state=on]:shadow-sm"
+          </button>
+
+          <button
+            type="button"
+            onClick={() => applyStyle("textAlign", "center")}
+            className={`h-8 w-10 flex items-center justify-center rounded-md transition-all ${
+              styles.textAlign === "center"
+                ? "bg-white text-foreground shadow-sm font-semibold border"
+                : "text-muted-foreground hover:bg-muted/50"
+            }`}
           >
             <AlignCenter className="h-4 w-4" />
-          </ToggleGroupItem>
-          <ToggleGroupItem
-            value="right"
-            className="h-8 rounded-md data-[state=on]:bg-white data-[state=on]:shadow-sm"
+          </button>
+
+          <button
+            type="button"
+            onClick={() => applyStyle("textAlign", "right")}
+            className={`h-8 w-10 flex items-center justify-center rounded-md transition-all ${
+              styles.textAlign === "right"
+                ? "bg-white text-foreground shadow-sm font-semibold border"
+                : "text-muted-foreground hover:bg-muted/50"
+            }`}
           >
             <AlignRight className="h-4 w-4" />
-          </ToggleGroupItem>
-        </ToggleGroup>
+          </button>
+        </div>
       </div>
 
       {/* FONT WEIGHT */}
