@@ -1,123 +1,95 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { ArrowUp, Loader2 } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
+import { Send, Sparkles } from "lucide-react";
 
-// Explicit internal typing decoupling brittle cross-folder page imports
-export type Messages = {
+interface Messages {
   role: string;
   content: string;
-};
+}
 
-type Props = {
+interface ChatSectionProps {
   messages: Messages[];
   loading: boolean;
-  onSend: (input: string) => void;
-};
+  onSend: (userInput: string) => void;
+}
 
-function ChatSection({ messages, loading, onSend }: Props) {
-  const [input, setInput] = useState<string>("");
-  const scrollAreaRef = useRef<HTMLDivElement>(null);
+export default function ChatSection({
+  messages,
+  loading,
+  onSend,
+}: ChatSectionProps) {
+  const [prompt, setPrompt] = useState("");
 
-  // Automatically anchors layout to the latest conversational line during active AI streaming
-  useEffect(() => {
-    if (scrollAreaRef.current) {
-      scrollAreaRef.current.scrollTop = scrollAreaRef.current.scrollHeight;
-    }
-  }, [messages, loading]);
+  const handleSendPrompt = () => {
+    if (!prompt.trim() || loading) return;
 
-  const handleSend = () => {
-    if (!input.trim() || loading) return;
-    onSend(input.trim());
-    setInput("");
+    // Trigger the master coordinator's streaming pipeline directly
+    onSend(prompt.trim());
+    setPrompt(""); // Clear the input field for the next instructions
   };
 
   return (
-    <div className="w-96 shadow h-[calc(100vh-73px)] p-4 flex flex-col bg-white border-r">
-      {/* CHAT AREA WITH VIEWPORT REFERENCE */}
-      <div
-        ref={scrollAreaRef}
-        className="flex-1 overflow-y-auto p-2 space-y-4 flex flex-col scroll-smooth"
-      >
-        {messages?.length === 0 ? (
-          <div className="flex-1 flex flex-col items-center justify-center text-center p-4">
-            <p className="text-sm font-medium text-muted-foreground">
-              No Messages yet. Describe your layout vision to initialize
-              generation!
-            </p>
-          </div>
-        ) : (
-          messages.map((msg, index) => {
-            const isUser = msg.role === "user";
-            // Combine role and structural criteria to create a stable rendering descriptor identity key
-            const uniqueKey = `${msg.role}-${index}`;
+    <div className="flex flex-col h-full bg-zinc-950 border-r border-zinc-900 w-[360px] text-zinc-100 shrink-0">
+      {/* CHAT MESSAGES DISPLAY RAIL */}
+      <div className="flex-1 overflow-y-auto p-4 space-y-4 select-text">
+        {messages.map((msg, index) => {
+          // Bypassing system instructions from rendering in the visible chat UI list
+          if (msg.role === "system") return null;
 
-            // Prevent blank message bubbles if placeholder containers render prematurely
-            if (!msg.content && msg.role === "assistant" && !loading)
-              return null;
-
-            return (
-              <div
-                key={uniqueKey}
-                className={`flex w-full ${isUser ? "justify-end" : "justify-start"}`}
-              >
-                <div
-                  className={`p-3 rounded-xl max-w-[85%] text-sm leading-relaxed shadow-sm whitespace-pre-wrap select-text break-words ${
-                    isUser
-                      ? "bg-primary text-primary-foreground font-medium rounded-tr-none"
-                      : "bg-muted text-muted-foreground border rounded-tl-none"
-                  }`}
-                >
-                  {msg.content || (
-                    <span className="flex items-center gap-1.5 text-xs text-muted-foreground animate-pulse">
-                      Analyzing structure...
-                    </span>
-                  )}
-                </div>
+          return (
+            <div
+              key={index}
+              className={`flex flex-col gap-1 p-3 rounded-xl max-w-[85%] text-sm animate-in fade-in-50 duration-200 ${
+                msg.role === "user"
+                  ? "bg-indigo-600/20 border border-indigo-500/30 text-indigo-200 ml-auto"
+                  : "bg-zinc-900 border border-zinc-800 text-zinc-300"
+              }`}
+            >
+              <span className="text-[10px] font-mono tracking-wider text-zinc-500 uppercase select-none">
+                {msg.role === "user" ? "You" : "Architect Engine"}
+              </span>
+              <div className="whitespace-pre-wrap leading-relaxed">
+                {msg.content}
               </div>
-            );
-          })
-        )}
-
-        {/* LOADING ANIMATION CONTAINER */}
-        {loading && (
-          <div className="flex justify-start w-full">
-            <div className="bg-muted text-muted-foreground border p-3 rounded-xl rounded-tl-none shadow-sm flex items-center justify-center">
-              <Loader2 className="animate-spin h-4 w-4 text-primary" />
             </div>
-          </div>
-        )}
+          );
+        })}
       </div>
 
-      {/* INPUT AREA */}
-      <div className="pt-3 border-t flex items-end gap-2 bg-white">
-        <textarea
-          value={input}
-          rows={2}
-          disabled={loading}
-          className="flex-1 resize-none border rounded-xl px-3 py-2 text-sm bg-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-          placeholder="Describe changes or a website design idea..."
-          onChange={(event) => setInput(event.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey) {
-              e.preventDefault();
-              handleSend();
-            }
-          }}
-        />
-
-        <Button
-          disabled={loading || !input.trim()}
-          onClick={handleSend}
-          size="icon"
-          className="rounded-xl h-9 w-9 shrink-0"
-        >
-          <ArrowUp className="h-4 w-4" />
-        </Button>
+      {/* INPUT CONTROLS SYSTEM PANEL */}
+      <div className="p-4 border-t border-zinc-900 bg-zinc-950/50 backdrop-blur-md">
+        <div className="relative border border-zinc-800 rounded-xl bg-zinc-900/40 overflow-hidden focus-within:border-zinc-700 transition-all">
+          <Textarea
+            value={prompt}
+            onChange={(e) => setPrompt(e.target.value)}
+            placeholder="Describe adjustments, add features, or new pages..."
+            disabled={loading}
+            className="w-full bg-transparent border-0 resize-none px-4 py-3 min-h-[80px] text-sm text-zinc-200 placeholder-zinc-500 focus-visible:ring-0 disabled:opacity-50"
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                handleSendPrompt();
+              }
+            }}
+          />
+          <div className="flex items-center justify-between px-4 pb-2 pt-1 text-xs text-zinc-500 select-none">
+            <span className="flex items-center gap-1">
+              <Sparkles className="w-3 h-3 text-indigo-400" /> Multi-page active
+            </span>
+            <Button
+              size="icon"
+              disabled={loading || !prompt.trim()}
+              onClick={handleSendPrompt}
+              className="bg-indigo-600 hover:bg-indigo-500 text-white w-7 h-7 rounded-lg transition-colors disabled:bg-zinc-800 disabled:text-zinc-600"
+            >
+              <Send className="w-3 h-3" />
+            </Button>
+          </div>
+        </div>
       </div>
     </div>
   );
 }
-
-export default ChatSection;

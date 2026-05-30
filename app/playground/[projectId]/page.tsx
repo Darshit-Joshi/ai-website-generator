@@ -20,49 +20,26 @@ export type Frame = {
   chatMessage: Messages[];
 };
 
-const prompt = `
-You are a senior frontend engineer and UI designer.
+const prompt = `You are an elite, award-winning Full-Stack Web Architect and UI/UX Engineer. Your goal is to analyze the user's input and generate an exceptionally high-fidelity, professional website layout.
 
-userInput: {userInput}
+CRITICAL ARCHITECTURAL RULES:
+1. Evaluate the user's intent. If they request a simple concept (e.g., "a single landing page", "a portfolio"), focus purely on one master file: "index.html".
+2. If they request or imply distinct layout scopes (e.g., "SaaS platform with pricing", "E-commerce with an about page"), architect a cohesive multi-page workspace structure.
+3. Every page layout generated MUST be entirely self-contained and wrapped inside an explicit custom XML tag format exactly like this:
+   <file name="index.html">
+   </file>
+   <file name="pricing.html">
+   </file>
 
-========================
-TASK RULES
-========================
-If the user asks to generate a website, UI, dashboard, landing page, or any design/code:
-- Generate a COMPLETE SINGLE-FILE WEBSITE
-- Include full HTML document structure:
-  <!DOCTYPE html>, <html>, <head>, <body>
-- Use Tailwind CSS via CDN:
-  <script src="https://cdn.tailwindcss.com"></script>
-- Add minimal but modern UI design (clean, startup style)
-- Make it FULLY RESPONSIVE (mobile + tablet + desktop)
-- Use modern layout patterns (grid, flex, cards, sections)
-- Add basic interactivity using vanilla JavaScript when needed
-- Use FontAwesome CDN if icons are required
-- Use placeholder images when needed:
-  https://community.softr.io/uploads/db9113/original/2X/7/74e0e7e302d0ff5d7773ca9a07e6f6f8817a68a6.jpeg
+HIGH-END VISUAL DESIGN REQUIREMENTS (Tailwind CSS):
+- Typography & Spacing: Enforce dramatic visual hierarchy. Use oversized, bold headings, meticulous element padding (e.g., 'py-24 px-8'), and high contrast.
+- Visual Assets: Do NOT use plain solid background blocks. Use modern styling patterns like mesh gradients, text clips ('bg-clip-text text-transparent bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500'), glassmorphism surfaces ('backdrop-blur-md bg-white/10 border border-white/20'), and subtle noise/grid background designs.
+- Interactions: Add premium fluid micro-interactions onto every clickable item using Tailwind transitions (e.g., 'hover:scale-[1.02] active:scale-98 transition-all duration-300 ease-out').
 
-========================
-OUTPUT RULES (VERY IMPORTANT)
-========================
-- Return ONLY ONE code block
-- No explanation
-- No text before or after
-- Always wrap output like this:
-
-\`\`\`html
-<!DOCTYPE html>
-<html>
-...
-</html>
-\`\`\`
-
-========================
-NON-CODE REQUESTS
-========================
-If the user is not asking for code:
-- respond normally in short helpful text
-`;
+ASSET INTEGRATION & SANDBOX COMPATIBILITY RULES:
+- Icons: You have full access to Lucide icons. Instead of using React component imports, write them as modern decorative elements or direct FontAwesome/Lucide native classes where applicable, ensuring they evaluate correctly in a pure web environment.
+- Images: Never leave standard empty grey boxes. Always use high-quality descriptive Unsplash image tags structured like: <img src="https://images.unsplash.com/photo-[id]?auto=format&fit=crop&w=800&q=80" alt="Detailed Description" /> using contextually relevant photos.
+- CODE RESTRAINT: Do NOT output markdown code blocks (e.g., \`\`\`html) or raw wrapping boilerplate like <html>, <head>, or <body> tags. Output ONLY the clean, ready-to-render inner functional DOM structures inside your respective <file name="..."> tags. Ensure every component block feels complete, polished, and ready for deployment.`;
 
 export const dynamic = "force-dynamic";
 
@@ -112,7 +89,7 @@ export default function PlaygroundPage() {
   );
 
   // ===============================
-  // SEND MESSAGE
+  // SEND MESSAGE (STREAM LINER)
   // ===============================
   const SendMessage = useCallback(
     async (userInput: string) => {
@@ -120,12 +97,11 @@ export default function PlaygroundPage() {
 
       try {
         setLoading(true);
-
         let currentHistory: Messages[] = [];
 
         setMessages((prev) => {
           const updated = [...prev, { role: "user", content: userInput }];
-          currentHistory = updated; // Capture latest array state without using hook dependencies
+          currentHistory = updated;
           return updated;
         });
 
@@ -150,8 +126,15 @@ export default function PlaygroundPage() {
         const decoder = new TextDecoder();
         let aiResponse = "";
 
-        // Initialize assistant container placeholder safely
-        setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
+        // Add cleaner status text placeholder inside visible Chat section bubble view window
+        setMessages((prev) => [
+          ...prev,
+          {
+            role: "assistant",
+            content:
+              "⚡ Analyzing layout architecture requirements and building canvas tabs...",
+          },
+        ]);
 
         while (true) {
           const { done, value } = await reader.read();
@@ -159,26 +142,17 @@ export default function PlaygroundPage() {
 
           aiResponse += decoder.decode(value, { stream: true });
 
-          // Functional update avoids concurrent thread pollution
-          setMessages((prev) => {
-            if (prev.length === 0) return prev;
-            const copy = [...prev];
-            copy[copy.length - 1] = {
-              role: "assistant",
-              content: aiResponse,
-            };
-            return copy;
-          });
+          // BYPASS PRINTING CODE IN CHAT: Forward raw compilation markers straight to canvas view state instantly
+          setGeneratedCode(aiResponse);
         }
 
-        // Case-insensitive clean block matching
-        const match = aiResponse.match(/```html\s*([\s\S]*?)```/i);
-
+        // Once full compilation stream concludes, present a production finish notification status string inside chat
         const finalMessages: Messages[] = [
           ...currentHistory,
           {
             role: "assistant",
-            content: match ? "Website generated successfully" : aiResponse,
+            content:
+              "✨ Architecture assembly complete! Use the selector tabs on the preview window to explore and modify your workspace layout design.",
           },
         ];
 
@@ -189,11 +163,8 @@ export default function PlaygroundPage() {
           frameId,
         });
 
-        if (match) {
-          const cleanCode = match[1].trim();
-          setGeneratedCode(cleanCode);
-          await SaveGeneratedCode(cleanCode);
-        }
+        // Save entire dynamic workspace layout architecture array map configurations to database persistence
+        await SaveGeneratedCode(aiResponse);
       } catch (err) {
         console.error(err);
         toast.error("Something went wrong processing your message");
@@ -201,7 +172,7 @@ export default function PlaygroundPage() {
         setLoading(false);
       }
     },
-    [frameId, projectId, SaveGeneratedCode], // Fixed: 'messages' is removed to stop function re-evaluation loops!
+    [frameId, projectId, SaveGeneratedCode],
   );
 
   // ===============================
@@ -221,19 +192,8 @@ export default function PlaygroundPage() {
       setFrameDetail(data);
       setMessages(data?.chatMessage || []);
 
-      const designCode = data?.designCode;
-
-      if (!designCode) {
-        setGeneratedCode("");
-        return;
-      }
-
-      const match = designCode.match(/```html\s*([\s\S]*?)```/i);
-      if (match) {
-        setGeneratedCode(match[1].trim());
-      } else {
-        setGeneratedCode(designCode.trim());
-      }
+      const designCode = data?.designCode || "";
+      setGeneratedCode(designCode.trim());
     } catch (err) {
       console.error(err);
       toast.error("Failed to load layout context frame");
@@ -274,7 +234,7 @@ export default function PlaygroundPage() {
           onSend={SendMessage}
         />
 
-        {/* Updated: Injected both code value state and hook modifier parameters to support bidirectional alignment syncing */}
+        {/* Dynamic target canvas parses multi-file scopes as they arrive live */}
         <WebsiteDesign code={generatedCode} />
       </div>
     </div>
