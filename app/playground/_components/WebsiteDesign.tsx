@@ -10,7 +10,7 @@ import React, {
 import axios from "axios";
 import { toast } from "sonner";
 import { useParams, useSearchParams } from "next/navigation";
-import { FileCode, Layers } from "lucide-react";
+import { FileCode, Layers, X } from "lucide-react";
 
 import WebpageTools from "./WebpageTools";
 import ImageSettingSection from "./ImageSettingSection";
@@ -38,6 +38,9 @@ const HTML_CODE = `
       outline: 3px dashed #3b82f6 !important;
       outline-offset: 2px;
     }
+    .canvas-selected-element {
+      outline: 2px solid red !important;
+    }
   </style>
 </head>
 <body class="bg-transparent m-0 p-0">
@@ -54,14 +57,30 @@ function WebsiteDesign({ code }: Props) {
   const [activeTab, setActiveTab] = useState<string>("index.html");
   const [generatedCode, setGeneratedCode] = useState("");
   const [selectedScreenSize, setSelectedScreenSize] = useState("web");
-  const [selectedEl, setSelectedEl] = useState<HTMLElement | null>(null);
+  const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
 
   const { projectId } = useParams();
   const searchParams = useSearchParams();
   const frameId = searchParams.get("frameId");
   const context = useContext(OnSaveContext);
 
-  // Parse custom tags safely
+  const getActiveElementByTrackedIndex = useCallback((): HTMLElement | null => {
+    if (selectedIndex === null) return null;
+    const doc = iframeRef.current?.contentDocument;
+    if (!doc) return null;
+    const allElements = Array.from(doc.querySelectorAll("#root *"));
+    return (allElements[selectedIndex] as HTMLElement) || null;
+  }, [selectedIndex]);
+
+  const handleClearSelection = useCallback(() => {
+    const activeEl = getActiveElementByTrackedIndex();
+    if (activeEl) {
+      activeEl.classList.remove("canvas-selected-element");
+      activeEl.removeAttribute("contenteditable");
+    }
+    setSelectedIndex(null);
+  }, [getActiveElementByTrackedIndex]);
+
   const parseProjectFiles = useCallback(
     (rawText: string): VirtualProjectWorkspace => {
       const workspace: VirtualProjectWorkspace = {};
@@ -90,9 +109,6 @@ function WebsiteDesign({ code }: Props) {
     [],
   );
 
-  // ==========================================
-  // FIXED: ONE-WAY ATOMIC SYNC LAYER
-  // ==========================================
   const syncFromIframe = useCallback(() => {
     const iframe = iframeRef.current;
     const doc = iframe?.contentDocument;
@@ -102,26 +118,18 @@ function WebsiteDesign({ code }: Props) {
       const clone = root.cloneNode(true) as HTMLElement;
       clone.querySelectorAll("*").forEach((el) => {
         el.removeAttribute("contenteditable");
-        if ((el as HTMLElement).style.outline === "2px solid red") {
-          (el as HTMLElement).style.outline = "";
-        }
+        el.classList.remove("canvas-selected-element");
       });
 
       const cleanHtmlString = clone.innerHTML.trim();
-
-      // Update both variables together natively without intermediate state intercept loops
       setGeneratedCode(cleanHtmlString);
       setVirtualWorkspace((prev) => {
         if (prev[activeTab] === cleanHtmlString) return prev;
-        return {
-          ...prev,
-          [activeTab]: cleanHtmlString,
-        };
+        return { ...prev, [activeTab]: cleanHtmlString };
       });
     }
   }, [activeTab]);
 
-  // Intercepting updates from sidebars explicitly by overwriting the dispatch pass-down hook
   const handleSidebarCodeMutation = useCallback(
     (updaterOrValue: string | ((prev: string) => string)) => {
       setGeneratedCode((prevValue) => {
@@ -132,10 +140,7 @@ function WebsiteDesign({ code }: Props) {
 
         setVirtualWorkspace((prevWorkspace) => {
           if (prevWorkspace[activeTab] === computedValue) return prevWorkspace;
-          return {
-            ...prevWorkspace,
-            [activeTab]: computedValue,
-          };
+          return { ...prevWorkspace, [activeTab]: computedValue };
         });
 
         return computedValue;
@@ -144,13 +149,9 @@ function WebsiteDesign({ code }: Props) {
     [activeTab],
   );
 
-  // ==========================================
-  // CORE IFRAME INTERACTIVE MOUNT ENGINE
-  // ==========================================
   useEffect(() => {
     const iframe = iframeRef.current;
     if (!iframe) return;
-
     const doc = iframe.contentDocument;
     if (!doc) return;
 
@@ -158,9 +159,28 @@ function WebsiteDesign({ code }: Props) {
     doc.write(HTML_CODE);
     doc.close();
 
-    let internalSelectedNode: HTMLElement | null = null;
+    const handleCanvasRefreshSignal = () => {
+      if (iframe.contentWindow) iframe.contentWindow.location.reload();
+    };
+    window.addEventListener(
+      "generator-preview-reload",
+      handleCanvasRefreshSignal,
+    );
 
-    const handleClick = (e: MouseEvent) => {
+    return () => {
+      window.removeEventListener(
+        "generator-preview-reload",
+        handleCanvasRefreshSignal,
+      );
+    };
+  }, []);
+
+  useEffect(() => {
+    const iframe = iframeRef.current;
+    const doc = iframe?.contentDocument;
+    if (!doc) return;
+
+    const handleDblClick = (e: MouseEvent) => {
       const target = e.target as HTMLElement;
       if (
         !target ||
@@ -173,132 +193,153 @@ function WebsiteDesign({ code }: Props) {
       e.preventDefault();
       e.stopPropagation();
 
-      if (internalSelectedNode) {
-        internalSelectedNode.style.outline = "";
-        internalSelectedNode.removeAttribute("contenteditable");
-      }
+      const allElements = Array.from(doc.querySelectorAll("#root *"));
+      const elementIndex = allElements.indexOf(target);
+      if (elementIndex === -1) return;
 
-      internalSelectedNode = target;
-      internalSelectedNode.style.outline = "2px solid red";
+      allElements.forEach((el) => {
+        el.classList.remove("canvas-selected-element");
+        el.removeAttribute("contenteditable");
+      });
 
+      target.classList.add("canvas-selected-element");
       if (!["IMG", "BUTTON", "SVG", "A"].includes(target.tagName)) {
-        internalSelectedNode.setAttribute("contenteditable", "true");
+        target.setAttribute("contenteditable", "true");
       }
 
-      setSelectedEl(internalSelectedNode);
-      syncFromIframe();
+      setSelectedIndex(elementIndex);
     };
 
     const handleInputEvent = () => {
       syncFromIframe();
     };
 
-    const attachEditorListeners = () => {
-      if (!doc.body) return requestAnimationFrame(attachEditorListeners);
-
-      doc.body.addEventListener("click", handleClick);
+    const attachListeners = () => {
+      if (!doc.body) return requestAnimationFrame(attachListeners);
+      doc.body.addEventListener("dblclick", handleDblClick);
       doc.body.addEventListener("input", handleInputEvent);
       doc.body.addEventListener("blur", handleInputEvent, true);
     };
 
-    attachEditorListeners();
-
-    const handleCanvasRefreshSignal = () => {
-      if (iframe.contentWindow) {
-        iframe.contentWindow.location.reload();
-      }
-    };
-    window.addEventListener(
-      "generator-preview-reload",
-      handleCanvasRefreshSignal,
-    );
+    attachListeners();
 
     return () => {
-      doc.body?.removeEventListener("click", handleClick);
+      doc.body?.removeEventListener("dblclick", handleDblClick);
       doc.body?.removeEventListener("input", handleInputEvent);
       doc.body?.removeEventListener("blur", handleInputEvent, true);
-      window.removeEventListener(
-        "generator-preview-reload",
-        handleCanvasRefreshSignal,
-      );
     };
   }, [syncFromIframe]);
 
-  // ==========================================
-  // MULTI-FILE WORKSPACE PARSING BOUNDARY
-  // ==========================================
   useEffect(() => {
     if (!code) return;
     const parsedFiles = parseProjectFiles(code);
 
     setVirtualWorkspace((prevWorkspace) => {
-      // Deep verification blocks unneeded state rerenders while streaming data chunks
-      const stringifiedNew = JSON.stringify(parsedFiles);
-      const stringifiedOld = JSON.stringify(prevWorkspace);
-      if (stringifiedNew === stringifiedOld) return prevWorkspace;
+      if (JSON.stringify(parsedFiles) === JSON.stringify(prevWorkspace))
+        return prevWorkspace;
       return parsedFiles;
     });
 
     if (!Object.keys(parsedFiles).includes(activeTab)) {
-      const primaryKey = Object.keys(parsedFiles)[0] || "index.html";
-      setActiveTab(primaryKey);
+      setActiveTab(Object.keys(parsedFiles)[0] || "index.html");
     }
   }, [code, parseProjectFiles, activeTab]);
 
-  // ==========================================
-  // INITIAL & ACTIVE CODE INJECTION BOUNDARY
-  // ==========================================
   useEffect(() => {
     const activeTargetCode = virtualWorkspace[activeTab] || "";
-
     const iframe = iframeRef.current;
     const doc = iframe?.contentDocument;
     const root = doc?.getElementById("root");
     if (!root || !doc) return;
 
-    if (root.innerHTML.trim() !== activeTargetCode) {
+    if (root.innerHTML.trim() !== activeTargetCode.trim()) {
       root.innerHTML = activeTargetCode;
       setGeneratedCode(activeTargetCode);
 
       const win = iframe.contentWindow as any;
       win?.lucide?.createIcons?.();
-    }
-  }, [activeTab, virtualWorkspace[activeTab]]); // Specific dependency match breaks recursive loops!
 
-  // ==========================================
-  // PRODUCTION DATA STORAGE PERSISTENCE SAVER
-  // ==========================================
-  const lastSaveRef = useRef(false);
-  const executeSavePipeline = useCallback(async () => {
-    if (!generatedCode) return;
+      if (win && !win.navigatePage) {
+        win.navigatePage = (pageName: string) => {
+          const expectedTabName = pageName.endsWith(".html")
+            ? pageName
+            : `${pageName}.html`;
 
-    try {
-      await axios.put("/api/frames", {
-        designCode: JSON.stringify(virtualWorkspace),
-        frameId,
-        projectId,
-      });
-      toast.success("Workspace layout persisted successfully!");
-    } catch (err) {
-      console.error("Save processing aborted:", err);
+          window.dispatchEvent(
+            new CustomEvent("sandbox-navigate-tab", {
+              detail: expectedTabName,
+            }),
+          );
+        };
+      }
+
+      if (selectedIndex !== null) {
+        const allElements = Array.from(doc.querySelectorAll("#root *"));
+        const targetEl = allElements[selectedIndex] as HTMLElement;
+        if (targetEl) {
+          targetEl.classList.add("canvas-selected-element");
+          if (!["IMG", "BUTTON", "SVG", "A"].includes(targetEl.tagName)) {
+            targetEl.setAttribute("contenteditable", "true");
+          }
+        }
+      }
     }
-  }, [generatedCode, virtualWorkspace, frameId, projectId]);
+  }, [activeTab, virtualWorkspace, selectedIndex]);
 
   useEffect(() => {
+    const handleGlobalRoutingSignal = (e: Event) => {
+      const customEvent = e as CustomEvent<string>;
+      const targetPageName = customEvent.detail;
+      if (Object.keys(virtualWorkspace).includes(targetPageName)) {
+        handleClearSelection();
+        setActiveTab(targetPageName);
+      }
+    };
+
+    window.addEventListener("sandbox-navigate-tab", handleGlobalRoutingSignal);
+    return () => {
+      window.removeEventListener(
+        "sandbox-navigate-tab",
+        handleGlobalRoutingSignal,
+      );
+    };
+  }, [virtualWorkspace, handleClearSelection]);
+
+  const lastSaveRef = useRef(false);
+  useEffect(() => {
+    const executeSavePipeline = async () => {
+      if (!generatedCode) return;
+      try {
+        await axios.put("/api/frames", {
+          designCode: JSON.stringify(virtualWorkspace),
+          frameId,
+          projectId,
+        });
+      } catch (err) {
+        console.error("Save error:", err);
+      }
+    };
+
     if (context?.onSaveData && !lastSaveRef.current) {
       lastSaveRef.current = true;
       executeSavePipeline();
     } else if (!context?.onSaveData) {
       lastSaveRef.current = false;
     }
-  }, [context?.onSaveData, executeSavePipeline]);
+  }, [
+    context?.onSaveData,
+    generatedCode,
+    virtualWorkspace,
+    frameId,
+    projectId,
+  ]);
 
   const workspaceFiles = Object.keys(virtualWorkspace);
+  const currentSelectedEl = getActiveElementByTrackedIndex();
 
   return (
     <div className="flex w-full h-full bg-muted/10 select-none">
       <div className="flex flex-col flex-1 h-full p-4 min-w-0">
-        {/* TAB NAVIGATION BAR */}
         {workspaceFiles.length > 0 && (
           <div className="flex items-center gap-1.5 bg-zinc-900 border border-zinc-800 text-white px-4 py-2 mb-3 rounded-xl shadow-md overflow-x-auto">
             <div className="flex items-center gap-1 text-xs text-zinc-400 font-medium font-mono mr-2 border-r border-zinc-800 pr-3 shrink-0">
@@ -309,16 +350,16 @@ function WebsiteDesign({ code }: Props) {
               <button
                 key={name}
                 onClick={() => {
-                  setSelectedEl(null);
+                  handleClearSelection();
                   setActiveTab(name);
                 }}
-                className={`flex items-center gap-1.5 px-3 py-1 text-xs font-mono font-medium rounded-md transition-all duration-200 shrink-0 ${
+                className={`flex items-center gap-1.5 px-3 py-1 text-xs font-mono font-medium rounded-md transition-all ${
                   activeTab === name
-                    ? "bg-indigo-600 text-white shadow-sm"
-                    : "bg-zinc-800/60 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800"
+                    ? "bg-indigo-600 text-white"
+                    : "bg-zinc-800/60 text-zinc-400 hover:text-zinc-200"
                 }`}
               >
-                <FileCode className="w-3 h-3 shrink-0" />
+                <FileCode className="w-3 h-3" />
                 {name}
               </button>
             ))}
@@ -328,9 +369,7 @@ function WebsiteDesign({ code }: Props) {
         <div className="flex-1 flex justify-center items-center bg-gray-100 p-2 rounded-xl border shadow-inner overflow-hidden relative">
           <div
             className="h-full bg-white border shadow-md transition-all duration-300 rounded-lg overflow-hidden"
-            style={{
-              width: selectedScreenSize === "web" ? "100%" : "375px",
-            }}
+            style={{ width: selectedScreenSize === "web" ? "100%" : "375px" }}
           >
             <iframe
               ref={iframeRef}
@@ -349,21 +388,42 @@ function WebsiteDesign({ code }: Props) {
         </div>
       </div>
 
-      {/* SIDEBAR WRAPPERS */}
-      {selectedEl && (
-        <div className="w-[380px] shrink-0 border-l bg-white h-full relative shadow-xl animate-in slide-in-from-right duration-200">
-          {selectedEl.tagName === "IMG" ? (
-            <ImageSettingSection
-              selectedEl={selectedEl as HTMLImageElement}
-              setGeneratedCode={handleSidebarCodeMutation as any}
-            />
-          ) : (
-            <SettingSection
-              selectedEl={selectedEl}
-              clearSelection={() => setSelectedEl(null)}
-              setGeneratedCode={handleSidebarCodeMutation as any}
-            />
-          )}
+      {/* SIDEBAR DESIGN PANEL SECTION WITH INTEGRATED CLOSE ENGINE */}
+      {selectedIndex !== null && currentSelectedEl && (
+        <div className="w-[380px] shrink-0 border-l bg-white h-full relative shadow-xl animate-in slide-in-from-right duration-200 flex flex-col">
+          <div className="flex items-center justify-between p-4 border-b bg-gray-50 shrink-0">
+            <div className="flex flex-col">
+              <span className="text-xs font-mono text-indigo-600 font-semibold uppercase tracking-wider">
+                Visual Studio Editor
+              </span>
+              <span className="text-sm font-bold text-zinc-800 font-mono">
+                &lt;{currentSelectedEl.tagName.toLowerCase()}&gt; Element Node
+              </span>
+            </div>
+            <button
+              onClick={handleClearSelection}
+              className="p-1.5 rounded-lg text-zinc-400 hover:bg-zinc-200 hover:text-zinc-700 transition-all border border-zinc-200 shadow-sm"
+              title="Close panel and unlock canvas element selection"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+
+          <div className="flex-1 overflow-y-auto">
+            {currentSelectedEl.tagName === "IMG" ? (
+              <ImageSettingSection
+                selectedEl={currentSelectedEl as HTMLImageElement}
+                setGeneratedCode={handleSidebarCodeMutation}
+                clearSelection={handleClearSelection}
+              />
+            ) : (
+              <SettingSection
+                selectedEl={currentSelectedEl}
+                setGeneratedCode={handleSidebarCodeMutation}
+                clearSelection={handleClearSelection}
+              />
+            )}
+          </div>
         </div>
       )}
     </div>

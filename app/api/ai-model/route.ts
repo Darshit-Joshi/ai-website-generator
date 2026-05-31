@@ -14,12 +14,47 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // --- HARMONIZED SYSTEM INSTRUCTION MATCHING XML COMPILATION SPEC ---
+    const dynamicRoutingSystemPrompt = {
+      role: "system",
+      content: `You are an elite, award-winning Full-Stack Web Architect and UI/UX Engineer specialized in standard web workspace generation.
+      Analyze the user's requirements to determine whether they need a single landing module or a structural multi-page website system.
+
+      CRITICAL WORKSPACE TAG ARCHITECTURE RULES:
+      1. If the intent is basic, focus strictly on generating one file layout named "index.html".
+      2. If the prompt implies multi-page structures (e.g., "SaaS engine with pricing tab", "E-commerce directory with a product info detail page"), architect an interconnected environment workspace.
+      3. Every page layout generated MUST be entirely self-contained and explicitly wrapped inside custom XML tags exactly like this:
+         <file name="index.html">
+           </file>
+         <file name="pricing.html">
+           </file>
+
+      HIGH-END VISUAL DESIGN SPECIFICATIONS (Tailwind CSS):
+      - Typography & Spacing: Enforce bold visual hierarchy, using large clear headers and generous padding tokens (e.g. 'py-24 px-8').
+      - Visual Assets: Use mesh gradients, background text clips ('bg-clip-text text-transparent bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500'), glassmorphic containers ('backdrop-blur-md bg-white/10 border border-white/20'), and subtle pattern patterns.
+      - Interactive Elements: Apply rich interactive standard transition states (e.g. 'hover:scale-[1.02] active:scale-98 transition-all duration-300 ease-out').
+
+      CROSS-PAGE ROUTING INTERACTION (Only for multi-file workspace scopes):
+      - Do NOT use standard anchor layout href attributes like '<a href="/about.html">'.
+      - Instead, use explicit functional click triggers calling the workspace environment page management runtime handler: onclick="window.navigatePage('pageName.html')".
+      - Example multi-page link layout: <button onclick="window.navigatePage('about.html')" class="hover:text-indigo-500 transition-colors">About Us</button>
+
+      ASSET RULES:
+      - Icons: Write direct Lucide or FontAwesome native class strings (e.g. <i class="fas fa-cookie-bite"></i>) that resolve safely inside raw browser DOM windows.
+      - Images: Use highly descriptive, context-specific Unsplash production strings: <img src="https://images.unsplash.com/photo-[id]?auto=format&fit=crop&w=800&q=80" alt="Detailed Description" />.
+
+      Do NOT return markdown code blocks blocks (e.g. \`\`\`html) or base template boilerplate wrapping tags like <html>, <head>, or <body>. 
+      Output ONLY clean, functional, componentized inner child structures mapped within the requested <file name="..."> tags.`,
+    };
+
+    const structuredMessages = [dynamicRoutingSystemPrompt, ...messages];
+
     const response = await axios({
       method: "post",
       url: "https://openrouter.ai/api/v1/chat/completions",
       data: {
         model: "openai/gpt-4o-mini",
-        messages,
+        messages: structuredMessages,
         stream: true,
       },
       headers: {
@@ -41,7 +76,6 @@ export async function POST(req: NextRequest) {
         let buffer = "";
 
         stream.on("data", (chunk: Buffer) => {
-          // Decode incoming fragments into unified safe string patterns
           buffer += decoder.decode(chunk, { stream: true });
 
           const lines = buffer.split("\n");
@@ -66,7 +100,7 @@ export async function POST(req: NextRequest) {
                 controller.enqueue(encoder.encode(content));
               }
             } catch (err) {
-              // Gracefully bypass structural anomalies within rapid streaming updates
+              // Ignore partial chunk boundaries
             }
           }
         });
@@ -81,7 +115,7 @@ export async function POST(req: NextRequest) {
                 if (content) controller.enqueue(encoder.encode(content));
               }
             } catch (e) {
-              // Ignore boundary string remainders
+              // Ignore boundary errors
             }
           }
           controller.close();
@@ -96,7 +130,7 @@ export async function POST(req: NextRequest) {
         "Content-Type": "text/event-stream; charset=utf-8",
         "Cache-Control": "no-cache, no-transform",
         Connection: "keep-alive",
-        "X-Accel-Buffering": "no", // Disables compression layer throttling on Vercel/Nginx networks
+        "X-Accel-Buffering": "no",
       },
     });
   } catch (error: any) {

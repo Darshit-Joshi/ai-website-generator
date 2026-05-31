@@ -20,7 +20,8 @@ export type Frame = {
   chatMessage: Messages[];
 };
 
-const prompt = `You are an elite, award-winning Full-Stack Web Architect and UI/UX Engineer. Your goal is to analyze the user's input and generate an exceptionally high-fidelity, professional website layout.
+// Re-aligned with a single source of truth format instructions matching the system prompt handler
+const baseSystemInstructions = `You are an elite, award-winning Full-Stack Web Architect and UI/UX Engineer. Your goal is to analyze the user's input and generate an exceptionally high-fidelity, professional website layout.
 
 CRITICAL ARCHITECTURAL RULES:
 1. Evaluate the user's intent. If they request a simple concept (e.g., "a single landing page", "a portfolio"), focus purely on one master file: "index.html".
@@ -37,14 +38,13 @@ HIGH-END VISUAL DESIGN REQUIREMENTS (Tailwind CSS):
 - Interactions: Add premium fluid micro-interactions onto every clickable item using Tailwind transitions (e.g., 'hover:scale-[1.02] active:scale-98 transition-all duration-300 ease-out').
 
 ASSET INTEGRATION & SANDBOX COMPATIBILITY RULES:
-- Icons: You have full access to Lucide icons. Instead of using React component imports, write them as modern decorative elements or direct FontAwesome/Lucide native classes where applicable, ensuring they evaluate correctly in a pure web environment.
+- Icons: You have full access to FontAwesome or Lucide icon class mappings. Instead of using React component imports, write them as modern decorative elements or direct FontAwesome native classes (e.g., <i class="fas fa-cookie-bite"></i>) where applicable, ensuring they evaluate correctly in a pure web environment.
 - Images: Never leave standard empty grey boxes. Always use high-quality descriptive Unsplash image tags structured like: <img src="https://images.unsplash.com/photo-[id]?auto=format&fit=crop&w=800&q=80" alt="Detailed Description" /> using contextually relevant photos.
 - CODE RESTRAINT: Do NOT output markdown code blocks (e.g., \`\`\`html) or raw wrapping boilerplate like <html>, <head>, or <body> tags. Output ONLY the clean, ready-to-render inner functional DOM structures inside your respective <file name="..."> tags. Ensure every component block feels complete, polished, and ready for deployment.`;
 
 export const dynamic = "force-dynamic";
 
 export default function PlaygroundPage() {
-  // Safe Next.js 16/React 19 Resolution for params and searchParams
   const rawParams = useParams();
   const rawSearchParams = useSearchParams();
 
@@ -68,9 +68,6 @@ export default function PlaygroundPage() {
   const [frameDetail, setFrameDetail] = useState<Frame | null>(null);
   const [initialPromptSent, setInitialPromptSent] = useState(false);
 
-  // ===============================
-  // SAVE CODE
-  // ===============================
   const SaveGeneratedCode = useCallback(
     async (code: string) => {
       try {
@@ -88,9 +85,6 @@ export default function PlaygroundPage() {
     [frameId, projectId],
   );
 
-  // ===============================
-  // SEND MESSAGE (STREAM LINER)
-  // ===============================
   const SendMessage = useCallback(
     async (userInput: string) => {
       if (!frameId || !projectId) return;
@@ -105,14 +99,14 @@ export default function PlaygroundPage() {
           return updated;
         });
 
-        const systemPrompt = prompt.replace("{userInput}", userInput);
+        const completeSystemPrompt = `${baseSystemInstructions}\n\nUser Context and Requirements:\n${userInput}`;
 
         const response = await fetch("/api/ai-model", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             messages: [
-              { role: "system", content: systemPrompt },
+              { role: "system", content: completeSystemPrompt },
               ...currentHistory,
             ],
           }),
@@ -126,13 +120,12 @@ export default function PlaygroundPage() {
         const decoder = new TextDecoder();
         let aiResponse = "";
 
-        // Add cleaner status text placeholder inside visible Chat section bubble view window
         setMessages((prev) => [
           ...prev,
           {
             role: "assistant",
             content:
-              "⚡ Analyzing layout architecture requirements and building canvas tabs...",
+              "⚡ Analyzing website architecture requirements and building canvas layout tabs...",
           },
         ]);
 
@@ -141,12 +134,9 @@ export default function PlaygroundPage() {
           if (done) break;
 
           aiResponse += decoder.decode(value, { stream: true });
-
-          // BYPASS PRINTING CODE IN CHAT: Forward raw compilation markers straight to canvas view state instantly
           setGeneratedCode(aiResponse);
         }
 
-        // Once full compilation stream concludes, present a production finish notification status string inside chat
         const finalMessages: Messages[] = [
           ...currentHistory,
           {
@@ -163,7 +153,6 @@ export default function PlaygroundPage() {
           frameId,
         });
 
-        // Save entire dynamic workspace layout architecture array map configurations to database persistence
         await SaveGeneratedCode(aiResponse);
       } catch (err) {
         console.error(err);
@@ -175,25 +164,18 @@ export default function PlaygroundPage() {
     [frameId, projectId, SaveGeneratedCode],
   );
 
-  // ===============================
-  // GET FRAME
-  // ===============================
   const GetFrameDetails = useCallback(async () => {
     if (!frameId || !projectId) return;
 
     try {
       setLoading(true);
-
       const result = await axios.get(
         `/api/frames?frameId=${frameId}&projectId=${projectId}`,
       );
-
       const data = result.data as Frame;
       setFrameDetail(data);
       setMessages(data?.chatMessage || []);
-
-      const designCode = data?.designCode || "";
-      setGeneratedCode(designCode.trim());
+      setGeneratedCode((data?.designCode || "").trim());
     } catch (err) {
       console.error(err);
       toast.error("Failed to load layout context frame");
@@ -202,12 +184,10 @@ export default function PlaygroundPage() {
     }
   }, [frameId, projectId]);
 
-  // Handle Initial Load safely
   useEffect(() => {
     GetFrameDetails();
   }, [GetFrameDetails]);
 
-  // Handle Automatic Initialization Trigger smoothly avoiding loops
   useEffect(() => {
     if (
       frameDetail &&
@@ -226,15 +206,12 @@ export default function PlaygroundPage() {
   return (
     <div className="h-screen overflow-hidden">
       <PlaygroundHeader />
-
       <div className="flex h-[calc(100vh-73px)] bg-gray-100">
         <ChatSection
           messages={messages}
           loading={loading}
           onSend={SendMessage}
         />
-
-        {/* Dynamic target canvas parses multi-file scopes as they arrive live */}
         <WebsiteDesign code={generatedCode} />
       </div>
     </div>

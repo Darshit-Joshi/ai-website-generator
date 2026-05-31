@@ -1,18 +1,23 @@
 "use client";
 
 import React, { useEffect, useRef, useState, useCallback } from "react";
-import { Image as ImageIcon, Loader2 } from "lucide-react";
+import { Image as ImageIcon, Loader2, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 
 type Props = {
-  selectedEl: HTMLImageElement | null;
-  setGeneratedCode: React.Dispatch<React.SetStateAction<string>>;
+  selectedEl: HTMLImageElement;
+  clearSelection: () => void;
+  setGeneratedCode: (updater: (prev: string) => string) => void;
 };
 
-function ImageSettingSection({ selectedEl, setGeneratedCode }: Props) {
+function ImageSettingSection({
+  selectedEl,
+  clearSelection,
+  setGeneratedCode,
+}: Props) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const [altText, setAltText] = useState("");
@@ -23,70 +28,14 @@ function ImageSettingSection({ selectedEl, setGeneratedCode }: Props) {
   const [selectedImage, setSelectedImage] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
 
-  // ==========================================
-  // COMPREHENSIVE CANVAS SYNCHRONIZATION WORKER
-  // ==========================================
-  const syncCanvasCodeAndDOM = useCallback(
-    (updatedProperties: { src?: string; alt?: string; styleStr?: string }) => {
-      if (!selectedEl) return;
+  // FIXED: Standardize scanning to parse matching position boundaries
+  const getSelectedImageDOMIndex = useCallback(() => {
+    const doc = selectedEl.ownerDocument;
+    if (!doc) return -1;
+    return Array.from(doc.querySelectorAll("#root *")).indexOf(selectedEl);
+  }, [selectedEl]);
 
-      // 1. Trace exact unique node index identification pathway within the preview iframe DOM
-      const previewDocument = selectedEl.ownerDocument;
-      const allImages = Array.from(previewDocument.querySelectorAll("img"));
-      const elementIndex = allImages.indexOf(selectedEl);
-
-      if (elementIndex === -1) return;
-
-      // 2. Perform smooth asynchronous canvas painting
-      requestAnimationFrame(() => {
-        if (updatedProperties.src !== undefined)
-          selectedEl.src = updatedProperties.src;
-        if (updatedProperties.alt !== undefined)
-          selectedEl.alt = updatedProperties.alt;
-      });
-
-      // 3. Rebuild raw template text safely using index-targeted document mapping
-      setGeneratedCode((prevCode) => {
-        if (!prevCode) return prevCode;
-
-        try {
-          // Parse the existing source string block into a secure sandbox layout engine
-          const parser = new DOMParser();
-          const doc = parser.parseFromString(prevCode, "text/html");
-          const targetedDomElements = doc.querySelectorAll("img");
-
-          if (targetedDomElements[elementIndex]) {
-            const targetNode = targetedDomElements[elementIndex];
-
-            if (updatedProperties.src !== undefined)
-              targetNode.setAttribute("src", updatedProperties.src);
-            if (updatedProperties.alt !== undefined)
-              targetNode.setAttribute("alt", updatedProperties.alt);
-
-            // Process inline dimensional attributes
-            targetNode.style.width = `${selectedEl.style.width}`;
-            targetNode.style.height = `${selectedEl.style.height}`;
-            targetNode.style.borderRadius = selectedEl.style.borderRadius;
-
-            return doc.documentElement.outerHTML;
-          }
-        } catch (err) {
-          console.error("HTML structural compilation failure:", err);
-        }
-        return prevCode;
-      });
-    },
-    [selectedEl, setGeneratedCode],
-  );
-
-  // Sync state cleanly when user clicks a different image
   useEffect(() => {
-    if (!selectedEl) {
-      setPreview("");
-      setSelectedImage(null);
-      return;
-    }
-
     setAltText(selectedEl.alt || "");
     setPreview(selectedEl.src || "");
     setWidth(parseInt(selectedEl.style.width) || selectedEl.clientWidth || 300);
@@ -94,60 +43,93 @@ function ImageSettingSection({ selectedEl, setGeneratedCode }: Props) {
       parseInt(selectedEl.style.height) || selectedEl.clientHeight || 200,
     );
     setBorderRadius(selectedEl.style.borderRadius || "0px");
-    setSelectedImage(null); // Reset staged file reference to prevent cross-node pollution
+    setSelectedImage(null);
   }, [selectedEl]);
 
-  // Safe dimensional/style synchronization method
+  // FIXED: Mutator wrap adjusted to handle pure structural inner contents safely
+  const runAtomicImageMutation = useCallback(
+    (mutationWorker: (node: HTMLImageElement) => void) => {
+      const targetIndex = getSelectedImageDOMIndex();
+      if (targetIndex === -1) return;
+
+      setGeneratedCode((prevCode) => {
+        if (!prevCode) return prevCode;
+        try {
+          const parser = new DOMParser();
+          const doc = parser.parseFromString(
+            `<div>${prevCode}</div>`,
+            "text/html",
+          );
+          const workspaceNodes = Array.from(doc.querySelectorAll("div *"));
+          const targetNode = workspaceNodes[targetIndex] as HTMLImageElement;
+
+          if (targetNode) {
+            mutationWorker(targetNode);
+            return doc.querySelector("div")?.innerHTML || prevCode;
+          }
+        } catch (err) {
+          console.error("Image code compilation failure:", err);
+        }
+        return prevCode;
+      });
+    },
+    [getSelectedImageDOMIndex, setGeneratedCode],
+  );
+
   const applyStyleMutation = (
     key: "width" | "height" | "borderRadius",
     value: string,
   ) => {
-    if (!selectedEl) return;
-
     selectedEl.style[key] = value;
-    syncCanvasCodeAndDOM({});
+
+    runAtomicImageMutation((targetNode) => {
+      targetNode.style[key] = value;
+    });
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file || !selectedEl) return;
+    if (!file) return;
 
     setSelectedImage(file);
     const reader = new FileReader();
     reader.onloadend = () => {
-      setPreview(reader.result as string);
-      syncCanvasCodeAndDOM({ src: reader.result as string });
+      const dataUrl = reader.result as string;
+      setPreview(dataUrl);
+      selectedEl.src = dataUrl;
+
+      runAtomicImageMutation((targetNode) => {
+        targetNode.setAttribute("src", dataUrl);
+      });
     };
     reader.readAsDataURL(file);
   };
 
   const saveUploadedFile = async () => {
-    if (!selectedImage || !selectedEl) {
-      toast.error("Please choose or verify asset source first");
-      return;
-    }
+    if (!selectedImage) return;
 
     try {
       setLoading(true);
-
-      // Revert back to using standard high-performance multipart boundary forms
       const formData = new FormData();
       formData.append("file", selectedImage);
 
       const res = await fetch("/api/upload-image", {
         method: "POST",
-        // Do NOT pass custom Content-Type headers here; the browser needs to set its own form boundaries!
         body: formData,
       });
 
       const data = await res.json();
-      if (!res.ok) {
+      if (!res.ok)
         throw new Error(data.error || "Image Upload Processing Rejected");
-      }
 
       setPreview(data.url);
-      syncCanvasCodeAndDOM({ src: data.url });
-      setSelectedImage(null); // Clear local staged binary handle
+      selectedEl.src = data.url;
+
+      runAtomicImageMutation((targetNode) => {
+        targetNode.setAttribute("src", data.url);
+      });
+
+      setSelectedImage(null);
       toast.success("Production asset mapped successfully!");
     } catch (err: any) {
       console.error(err);
@@ -158,8 +140,6 @@ function ImageSettingSection({ selectedEl, setGeneratedCode }: Props) {
   };
 
   const generateAIImage = async () => {
-    if (!selectedEl) return;
-
     if (!altText.trim()) {
       toast.error(
         "Please enter a descriptive prompt in the Alt Text field first!",
@@ -169,8 +149,6 @@ function ImageSettingSection({ selectedEl, setGeneratedCode }: Props) {
 
     try {
       setLoading(true);
-
-      // Request the authenticated signed URL from your own backend route
       const response = await fetch("/api/generate-ai-image", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -181,41 +159,42 @@ function ImageSettingSection({ selectedEl, setGeneratedCode }: Props) {
       if (!response.ok)
         throw new Error(data.error || "Generation engine timeout");
 
-      // Update the local preview canvas view
       setPreview(data.url);
+      selectedEl.src = data.url;
 
-      // Update the live iframe element and master HTML code blocks
-      syncCanvasCodeAndDOM({ src: data.url });
+      runAtomicImageMutation((targetNode) => {
+        targetNode.setAttribute("src", data.url);
+      });
 
       toast.success("AI Image Context generated and synchronized!");
     } catch (err: any) {
       console.error(err);
-      toast.error(
-        err.message || "AI Image Generation failed. Check backend credentials.",
-      );
+      toast.error(err.message || "AI Image Generation failed.");
     } finally {
       setLoading(false);
     }
   };
-  if (!selectedEl) {
-    return (
-      <div className="w-96 shadow p-6 border-l bg-white h-[calc(100vh-73px)] flex flex-col items-center justify-center text-center text-muted-foreground">
-        <ImageIcon className="h-8 w-8 mb-2 text-muted-foreground/60" />
-        <p className="text-sm font-medium">
-          Select an image element inside the live website preview to modify its
-          properties.
-        </p>
-      </div>
-    );
-  }
 
   return (
-    <div className="w-96 shadow p-4 space-y-5 bg-white border-l h-[calc(100vh-73px)] overflow-y-auto">
-      <h2 className="flex gap-2 items-center font-bold text-lg border-b pb-3">
-        <ImageIcon className="text-primary h-5 w-5" /> Image Settings
-      </h2>
+    <div className="h-screen w-96 overflow-y-auto border-l bg-white p-5 shadow-xl pb-12 transition-all">
+      <div className="mb-6 flex items-center justify-between border-b pb-4">
+        <div className="flex items-center gap-2">
+          <ImageIcon className="text-primary h-5 w-5" />
+          <h2 className="text-base font-bold text-foreground">
+            Image Settings
+          </h2>
+        </div>
+        <Button
+          size="icon"
+          variant="ghost"
+          className="h-8 w-8 rounded-md text-muted-foreground hover:bg-muted"
+          onClick={clearSelection}
+          title="Close Panel"
+        >
+          <X className="h-4 w-4" />
+        </Button>
+      </div>
 
-      {/* Interactive Preview Frame */}
       <div className="space-y-2">
         <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
           Asset Preview
@@ -257,8 +236,7 @@ function ImageSettingSection({ selectedEl, setGeneratedCode }: Props) {
         </Button>
       )}
 
-      {/* Alt Text Setting */}
-      <div className="space-y-1.5">
+      <div className="space-y-1.5 pt-2">
         <Label className="text-xs font-semibold text-muted-foreground">
           Alt (Description Prompt)
         </Label>
@@ -266,13 +244,14 @@ function ImageSettingSection({ selectedEl, setGeneratedCode }: Props) {
           value={altText}
           onChange={(e) => {
             setAltText(e.target.value);
-            syncCanvasCodeAndDOM({ alt: e.target.value });
+            runAtomicImageMutation((targetNode) => {
+              targetNode.setAttribute("alt", e.target.value);
+            });
           }}
           placeholder="Describe asset contents for accessibility..."
         />
       </div>
 
-      {/* AI Synthesis Trigger */}
       <Button
         className="w-full font-medium"
         variant="secondary"
@@ -282,7 +261,6 @@ function ImageSettingSection({ selectedEl, setGeneratedCode }: Props) {
         Generate AI Image from Prompt
       </Button>
 
-      {/* Sizing Boundaries Section */}
       <div className="space-y-2 border-t pt-4">
         <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
           Dimensions (px)
@@ -302,7 +280,6 @@ function ImageSettingSection({ selectedEl, setGeneratedCode }: Props) {
               }}
             />
           </div>
-
           <div className="flex-1 space-y-1">
             <span className="text-[10px] uppercase font-bold text-muted-foreground/70">
               Height
@@ -320,7 +297,6 @@ function ImageSettingSection({ selectedEl, setGeneratedCode }: Props) {
         </div>
       </div>
 
-      {/* Border Customizer */}
       <div className="space-y-1.5 border-t pt-4">
         <Label className="text-xs font-semibold text-muted-foreground">
           Border Radius (CSS format)
